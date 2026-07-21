@@ -173,7 +173,7 @@
     }
 
     function handleSignal(msg) {
-        var peerId = msg.peerId;
+        var peerId = msg.peerId || msg.fromId;
         var signal = msg.signal;
 
         if (!signal) return;
