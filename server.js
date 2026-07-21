@@ -5,6 +5,7 @@ const { WebSocketServer } = require('ws');
 const helmet = require('helmet');
 const compression = require('compression');
 const path = require('path');
+const fs = require('fs');
 const crypto = require('crypto');
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -21,7 +22,9 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 app.use(compression());
-app.use(express.static(path.join(__dirname, '..', 'client'), {
+
+const clientPath = path.join(__dirname, 'client');
+app.use(express.static(clientPath, {
   maxAge: '1h',
   etag: true,
 }));
@@ -331,9 +334,13 @@ function cleanupExpiredRooms() {
 }
 setInterval(cleanupExpiredRooms, 60000);
 
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(clientPath, 'index.html'));
+});
+
 server.listen(PORT, HOST, () => {
   console.log(`[Chaminda Drop] Server running on ${HOST}:${PORT}`);
-  console.log(`[Chaminda Drop] Serving client from ${path.join(__dirname, '..', 'client')}`);
+  console.log(`[Chaminda Drop] Serving client from ${clientPath}`);
 });
 
 process.on('SIGTERM', () => {
