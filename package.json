@@ -1,7 +1,7 @@
 {
-  "name": "chaminda-drop-server",
+  "name": "chaminda-drop",
   "version": "1.0.0",
-  "description": "Signaling server for Chaminda Drop file sharing",
+  "description": "Fast, secure peer-to-peer file sharing",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

@@ -4,39 +4,38 @@
     device: null,
     roomCode: null,
     peers: {},
-    selectedPeerId: null,
-    pendingFiles: []
+    selectedPeer: null,
+    pendingFiles: [],
+    transferCounter: 0
   };
 
   document.addEventListener('DOMContentLoaded', function() {
     state.device = Device.init();
-    showDeviceInfo();
+    showDevice();
     connectSignaling();
-    setupEventListeners();
+    setupButtons();
     setupDragDrop();
-    registerServiceWorker();
+    registerSW();
   });
 
-  function showDeviceInfo() {
+  function showDevice() {
     var nameEl = document.getElementById('deviceName');
-    var platformEl = document.getElementById('devicePlatform');
+    var platEl = document.getElementById('devicePlatform');
     if (nameEl) nameEl.textContent = state.device.name;
-    if (platformEl) platformEl.textContent = state.device.platform;
+    if (platEl) platEl.textContent = state.device.platform;
   }
 
   function connectSignaling() {
     Signaling.connect();
 
     Signaling.on('connected', function() {
-      UI.showToast('Connected to server', 'success');
-      var dot = document.querySelector('.status-dot');
-      if (dot) dot.classList.add('connected');
+      UI.showToast('Connected', 'success');
+      document.querySelector('.status-dot').classList.add('connected');
     });
 
     Signaling.on('disconnected', function() {
-      UI.showToast('Disconnected from server', 'error');
-      var dot = document.querySelector('.status-dot');
-      if (dot) dot.classList.remove('connected');
+      UI.showToast('Disconnected', 'error');
+      document.querySelector('.status-dot').classList.remove('connected');
     });
 
     Signaling.on('welcome', function(msg) {
@@ -46,13 +45,19 @@
 
     Signaling.on('room-created', function(msg) {
       state.roomCode = msg.roomId;
-      showRoomInfo(msg.roomId);
-      UI.showToast('Room created: ' + msg.roomId, 'success');
+      document.getElementById('roomCode').textContent = msg.roomId;
+      document.getElementById('roomActions').classList.add('hidden');
+      document.getElementById('roomInfo').classList.remove('hidden');
+      document.getElementById('peersSection').classList.remove('hidden');
+      UI.showToast('Room created', 'success');
     });
 
     Signaling.on('room-joined', function(msg) {
       state.roomCode = msg.roomId;
-      showRoomInfo(msg.roomId);
+      document.getElementById('roomCode').textContent = msg.roomId;
+      document.getElementById('roomActions').classList.add('hidden');
+      document.getElementById('roomInfo').classList.remove('hidden');
+      document.getElementById('peersSection').classList.remove('hidden');
       UI.showToast('Joined room: ' + msg.roomId, 'success');
     });
 
@@ -63,22 +68,22 @@
           state.peers[p.peerId] = { id: p.peerId, name: p.name, platform: p.platform, icon: p.icon };
         });
       }
-      updatePeersUI();
+      refreshPeers();
     });
 
     Signaling.on('peer-joined', function(msg) {
       state.peers[msg.peerId] = { id: msg.peerId, name: msg.name, platform: msg.platform, icon: msg.icon };
-      updatePeersUI();
+      refreshPeers();
       UI.playSound('connect');
       UI.showToast(msg.name + ' joined', 'success');
-      WebRTC.connectToPeer(msg.peerId);
+      WebRTC.connectTo(msg.peerId);
     });
 
     Signaling.on('peer-left', function(msg) {
       var peer = state.peers[msg.peerId];
       delete state.peers[msg.peerId];
-      WebRTC.disconnectPeer(msg.peerId);
-      updatePeersUI();
+      WebRTC.closePeer(msg.peerId);
+      refreshPeers();
       UI.playSound('disconnect');
       if (peer) UI.showToast(peer.name + ' left', 'warning');
     });
@@ -86,7 +91,7 @@
     Signaling.on('peer-renamed', function(msg) {
       if (state.peers[msg.peerId]) {
         state.peers[msg.peerId].name = msg.newName;
-        updatePeersUI();
+        refreshPeers();
       }
     });
 
@@ -95,12 +100,8 @@
     });
 
     Signaling.on('transfer-request', function(msg) {
-      var fromName = msg.fromName || 'Unknown';
-      var files = msg.files || [];
-      var totalSize = msg.totalSize || 0;
       UI.playSound('transfer');
-      UI.showTransferRequest(
-        fromName, files, totalSize,
+      UI.showTransferRequest(msg.fromName, msg.files || [], msg.totalSize || 0,
         function() {
           Signaling.send({ type: 'transfer-response', targetId: msg.fromId, accepted: true });
           UI.showToast('Transfer accepted', 'success');
@@ -113,6 +114,10 @@
 
     Signaling.on('transfer-response', function(msg) {
       if (msg.accepted && state.pendingFiles.length > 0) {
+        var id = ++state.transferCounter;
+        UI.addTransferItem(id, state.pendingFiles[0].name, state.pendingFiles.length);
+        Transfer.on('progress', function(p) { UI.updateTransferProgress(id, p.percent, p.speedText); });
+        Transfer.on('file-sent', function() { UI.updateTransferProgress(id, 100, 'Done'); });
         Transfer.sendFiles(msg.fromId, state.pendingFiles);
         state.pendingFiles = [];
       } else if (!msg.accepted) {
@@ -121,36 +126,22 @@
       }
     });
 
-    Signaling.on('text-received', function(msg) {
-      UI.showToast(msg.fromName + ': ' + msg.text, 'info');
-    });
-
-    Signaling.on('room-expired', function(msg) {
-      state.roomCode = null;
-      state.peers = {};
-      WebRTC.disconnectAll();
-      hideRoomInfo();
+    Signaling.on('room-expired', function() {
+      leaveRoom();
       UI.showToast('Room expired', 'warning');
     });
 
     Signaling.on('error', function(msg) {
-      UI.showToast(msg.message || 'An error occurred', 'error');
+      UI.showToast(msg.message || 'Error', 'error');
     });
 
-    WebRTC.on('peer-connected', function(msg) {
-      UI.showToast('Connected to peer', 'success');
+    Transfer.on('receive-start', function(d) {
+      var id = ++state.transferCounter;
+      UI.addTransferItem(id, d.fileName, d.totalFiles);
     });
 
-    WebRTC.on('data-channel-open', function(msg) {
-      UI.showToast('Data channel ready', 'success');
-    });
-
-    Transfer.on('progress', function(msg) {
-      UI.showToast('Transfer: ' + msg.fileName + ' ' + Math.round(msg.percent) + '%', 'info');
-    });
-
-    Transfer.on('file-sent', function(msg) {
-      UI.showToast('Sent: ' + msg.fileName, 'success');
+    Transfer.on('file-received', function(d) {
+      UI.showToast('Received: ' + d.fileName, 'success');
     });
 
     Transfer.on('transfer-complete', function() {
@@ -158,183 +149,141 @@
     });
   }
 
-  function setupEventListeners() {
-    var createBtn = document.getElementById('createRoom');
-    var joinBtn = document.getElementById('joinRoom');
-    var joinCodeInput = document.getElementById('roomCode');
-    var leaveBtn = document.getElementById('leaveRoom');
-    var showQRBtn = document.getElementById('showQR');
-    var editNameBtn = document.getElementById('editDeviceName');
-    var fileInput = document.getElementById('fileInput');
-
-    if (createBtn) createBtn.addEventListener('click', function() {
-      if (state.roomCode) {
-        UI.showToast('Already in a room', 'warning');
-        return;
-      }
+  function setupButtons() {
+    document.getElementById('createRoomBtn').addEventListener('click', function() {
+      if (state.roomCode) return UI.showToast('Already in a room', 'warning');
       Signaling.send({ type: 'create-room', deviceInfo: state.device });
     });
 
-    if (joinBtn) joinBtn.addEventListener('click', function() {
-      var code = joinCodeInput ? joinCodeInput.value.trim() : '';
-      if (!code) {
-        UI.showToast('Enter a room code', 'warning');
-        return;
-      }
+    document.getElementById('joinRoomBtn').addEventListener('click', function() {
+      var code = document.getElementById('roomCodeInput').value.trim().toUpperCase();
+      if (!code) return UI.showToast('Enter a room code', 'warning');
       Signaling.send({ type: 'join-room', roomId: code, deviceInfo: state.device });
     });
 
-    if (joinCodeInput) joinCodeInput.addEventListener('keydown', function(e) {
+    document.getElementById('roomCodeInput').addEventListener('keydown', function(e) {
       if (e.key === 'Enter') {
-        var code = joinCodeInput.value.trim();
+        var code = this.value.trim().toUpperCase();
         if (code) Signaling.send({ type: 'join-room', roomId: code, deviceInfo: state.device });
       }
     });
 
-    if (leaveBtn) leaveBtn.addEventListener('click', function() {
-      Signaling.send({ type: 'leave-room' });
-      WebRTC.disconnectAll();
-      state.roomCode = null;
-      state.peers = {};
-      state.selectedPeerId = null;
-      hideRoomInfo();
-      UI.showToast('Left room', 'info');
-    });
+    document.getElementById('leaveRoomBtn').addEventListener('click', leaveRoom);
 
-    if (showQRBtn) showQRBtn.addEventListener('click', function() {
-      if (state.roomCode) UI.showQRCode(state.roomCode);
-    });
-
-    if (editNameBtn) editNameBtn.addEventListener('click', function() {
-      var nameEl = document.getElementById('deviceName');
-      if (nameEl) {
-        var currentName = nameEl.textContent;
-        var newName = prompt('Enter new device name:', currentName);
-        if (newName && newName.trim()) {
-          state.device.name = newName.trim();
-          nameEl.textContent = newName.trim();
-          Signaling.send({ type: 'rename', name: newName.trim() });
-        }
+    document.getElementById('copyCodeBtn').addEventListener('click', function() {
+      if (state.roomCode) {
+        navigator.clipboard.writeText(state.roomCode).then(function() { UI.showToast('Copied!', 'success'); });
       }
     });
 
-    if (fileInput) fileInput.addEventListener('change', function() {
-      if (fileInput.files.length > 0) handleFileSelection(Array.from(fileInput.files));
+    document.getElementById('qrBtn').addEventListener('click', function() {
+      if (!state.roomCode) return;
+      var url = location.origin + '?room=' + state.roomCode;
+      QR.renderTo(document.getElementById('qrCanvas'), url, 220);
+      document.getElementById('qrText').textContent = state.roomCode;
+      UI.showModal('qrModal');
+    });
+
+    document.getElementById('closeQRBtn').addEventListener('click', function() { UI.hideModal('qrModal'); });
+
+    document.getElementById('editNameBtn').addEventListener('click', function() {
+      document.getElementById('renameInput').value = state.device.name;
+      UI.showModal('renameModal');
+    });
+
+    document.getElementById('renameSaveBtn').addEventListener('click', function() {
+      var name = document.getElementById('renameInput').value.trim();
+      if (name) {
+        state.device.name = name;
+        document.getElementById('deviceName').textContent = name;
+        Signaling.send({ type: 'rename', name: name });
+      }
+      UI.hideModal('renameModal');
+    });
+
+    document.getElementById('renameCancelBtn').addEventListener('click', function() { UI.hideModal('renameModal'); });
+
+    document.getElementById('closeTransfersBtn').addEventListener('click', function() {
+      document.getElementById('transferPanel').classList.add('hidden');
+    });
+
+    document.getElementById('fileInput').addEventListener('change', function() {
+      if (this.files.length > 0) handleFiles(Array.from(this.files));
+      this.value = '';
+    });
+
+    [document.getElementById('transferModal'), document.getElementById('renameModal'), document.getElementById('qrModal')].forEach(function(el) {
+      el.addEventListener('click', function(e) { if (e.target === el) UI.hideModal(el.id); });
     });
   }
 
   function setupDragDrop() {
-    var dropZone = document.getElementById('dropZone');
-    var dragCounter = 0;
+    var zone = document.getElementById('dropZone');
+    var counter = 0;
 
-    document.addEventListener('dragenter', function(e) {
-      e.preventDefault();
-      dragCounter++;
-      if (dropZone) dropZone.classList.add('active');
-    });
-
-    document.addEventListener('dragleave', function(e) {
-      e.preventDefault();
-      dragCounter--;
-      if (dragCounter <= 0) {
-        dragCounter = 0;
-        if (dropZone) dropZone.classList.remove('active');
-      }
-    });
-
-    document.addEventListener('dragover', function(e) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'copy';
-    });
-
+    document.addEventListener('dragenter', function(e) { e.preventDefault(); counter++; zone.classList.add('active'); });
+    document.addEventListener('dragleave', function(e) { e.preventDefault(); counter--; if (counter <= 0) { counter = 0; zone.classList.remove('active'); } });
+    document.addEventListener('dragover', function(e) { e.preventDefault(); });
     document.addEventListener('drop', function(e) {
-      e.preventDefault();
-      dragCounter = 0;
-      if (dropZone) dropZone.classList.remove('active');
-      if (e.dataTransfer.files.length > 0) {
-        handleFileSelection(Array.from(e.dataTransfer.files));
-      }
+      e.preventDefault(); counter = 0; zone.classList.remove('active');
+      if (e.dataTransfer.files.length > 0) handleFiles(Array.from(e.dataTransfer.files));
     });
   }
 
-  function handleFileSelection(files) {
-    if (!state.roomCode) {
-      UI.showToast('Create a room first', 'warning');
-      return;
+  function handleFiles(files) {
+    if (!state.roomCode) return UI.showToast('Create a room first', 'warning');
+    var keys = Object.keys(state.peers);
+    if (keys.length === 0) return UI.showToast('No peers connected', 'warning');
+    if (!state.selectedPeer) {
+      if (keys.length === 1) state.selectedPeer = keys[0];
+      else return UI.showToast('Select a peer first', 'info');
     }
-    var peerKeys = Object.keys(state.peers);
-    if (peerKeys.length === 0) {
-      UI.showToast('No peers connected', 'warning');
-      return;
-    }
-    if (!state.selectedPeerId) {
-      if (peerKeys.length === 1) {
-        state.selectedPeerId = peerKeys[0];
-      } else {
-        UI.showToast('Select a peer to send files to', 'info');
-        return;
-      }
-    }
-    var targetId = state.selectedPeerId;
-    var targetPeer = state.peers[targetId];
-    var totalSize = files.reduce(function(s, f) { return s + f.size; }, 0);
+    var target = state.peers[state.selectedPeer];
+    var total = files.reduce(function(s, f) { return s + f.size; }, 0);
 
     UI.showTransferRequest(
-      targetPeer ? targetPeer.name : 'Peer',
+      target ? target.name : 'Peer',
       files.map(function(f) { return { name: f.name, size: f.size }; }),
-      totalSize,
+      total,
       function() {
         state.pendingFiles = files;
         Signaling.send({
-          type: 'transfer-request',
-          targetId: targetId,
+          type: 'transfer-request', targetId: state.selectedPeer,
           files: files.map(function(f) { return { name: f.name, size: f.size, mimeType: f.type }; }),
-          totalSize: totalSize
+          totalSize: total
         });
-        UI.showToast('Transfer request sent', 'info');
+        UI.showToast('Request sent', 'info');
       },
       function() {}
     );
   }
 
-  function showRoomInfo(roomId) {
-    var roomInfo = document.getElementById('roomInfo');
-    var currentRoom = document.getElementById('currentRoom');
-    var peersSection = document.getElementById('peersSection');
-    if (roomInfo) roomInfo.classList.remove('hidden');
-    if (currentRoom) currentRoom.textContent = roomId;
-    if (peersSection) peersSection.classList.remove('hidden');
+  function leaveRoom() {
+    Signaling.send({ type: 'leave-room' });
+    WebRTC.disconnectAll();
+    state.roomCode = null;
+    state.peers = {};
+    state.selectedPeer = null;
+    document.getElementById('roomActions').classList.remove('hidden');
+    document.getElementById('roomInfo').classList.add('hidden');
+    document.getElementById('peersSection').classList.add('hidden');
+    document.getElementById('peersGrid').innerHTML = '';
+    UI.showToast('Left room', 'info');
   }
 
-  function hideRoomInfo() {
-    var roomInfo = document.getElementById('roomInfo');
-    var peersSection = document.getElementById('peersSection');
-    var peers = document.getElementById('peers');
-    if (roomInfo) roomInfo.classList.add('hidden');
-    if (peersSection) peersSection.classList.add('hidden');
-    if (peers) peers.innerHTML = '';
+  function refreshPeers() {
+    var arr = Object.values(state.peers);
+    UI.updatePeerGrid(arr.map(function(p) {
+      return { id: p.id, name: p.name, icon: p.icon || 'desktop', platform: p.platform || '' };
+    }), state.selectedPeer);
   }
 
-  function updatePeersUI() {
-    var peerArray = Object.values(state.peers).map(function(p) {
-      return { id: p.id, name: p.name, deviceType: p.icon || 'desktop', platform: p.platform || 'Unknown', selected: p.id === state.selectedPeerId };
-    });
-    UI.updatePeerGrid(peerArray);
-  }
-
-  function selectPeer(peerId) {
-    state.selectedPeerId = peerId;
-    updatePeersUI();
-  }
-
-  function registerServiceWorker() {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(function() {});
-    }
+  function registerSW() {
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function() {});
   }
 
   window.App = {
-    selectPeer: selectPeer,
+    selectPeer: function(id) { state.selectedPeer = id; },
     getState: function() { return state; }
   };
 })();

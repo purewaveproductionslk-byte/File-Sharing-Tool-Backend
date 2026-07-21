@@ -1,318 +1,157 @@
 (function() {
-    var CHUNK_SIZE = 64 * 1024;
-    var transfers = {};
-    var handlers = {};
+  var CHUNK = 64 * 1024;
+  var handlers = {};
+  var incoming = {};
 
-    function emit(event, data) {
-        if (!handlers[event]) return;
-        var list = handlers[event];
-        for (var i = 0; i < list.length; i++) {
-            try {
-                list[i](data);
-            } catch (e) {
-                console.error('Transfer handler error:', e);
-            }
-        }
+  function emit(event, data) {
+    if (handlers[event]) handlers[event].forEach(function(h) { h(data); });
+  }
+
+  function on(event, handler) {
+    if (!handlers[event]) handlers[event] = [];
+    handlers[event].push(handler);
+  }
+
+  function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
+    return (bytes / 1073741824).toFixed(2) + ' GB';
+  }
+
+  function formatSpeed(bps) {
+    if (bps < 1024) return bps.toFixed(0) + ' B/s';
+    if (bps < 1048576) return (bps / 1024).toFixed(1) + ' KB/s';
+    return (bps / 1048576).toFixed(1) + ' MB/s';
+  }
+
+  function sendFiles(peerId, files) {
+    var ch = WebRTC.getChannel(peerId);
+    if (!ch || ch.readyState !== 'open') return false;
+
+    var state = { files: files, idx: 0, offset: 0, sent: 0, start: Date.now(), channel: ch };
+
+    sendMeta(state);
+    return true;
+  }
+
+  function sendMeta(state) {
+    var file = state.files[state.idx];
+    state.channel.send(JSON.stringify({
+      type: 'file-meta', name: file.name, size: file.size, mimeType: file.type || 'application/octet-stream',
+      totalFiles: state.files.length, fileIndex: state.idx
+    }));
+    state.offset = 0;
+    state.fileSent = 0;
+    sendChunk(state);
+  }
+
+  function sendChunk(state) {
+    var file = state.files[state.idx];
+    if (state.offset >= file.size) {
+      state.channel.send(JSON.stringify({ type: 'file-end', fileIndex: state.idx }));
+      state.sent += file.size;
+      emit('file-sent', { fileName: file.name, fileIndex: state.idx });
+      state.idx++;
+      if (state.idx < state.files.length) {
+        sendMeta(state);
+      } else {
+        emit('transfer-complete');
+      }
+      return;
     }
 
-    function on(event, handler) {
-        if (!handlers[event]) handlers[event] = [];
-        handlers[event].push(handler);
-    }
+    var end = Math.min(state.offset + CHUNK, file.size);
+    var slice = file.slice(state.offset, end);
 
-    function off(event, handler) {
-        if (!handlers[event]) return;
-        if (!handler) {
-            delete handlers[event];
-            return;
-        }
-        var list = handlers[event];
-        for (var i = list.length - 1; i >= 0; i--) {
-            if (list[i] === handler) list.splice(i, 1);
-        }
-        if (list.length === 0) delete handlers[event];
-    }
+    var header = new TextEncoder().encode(JSON.stringify({ type: 'file-chunk', fileIndex: state.idx }));
+    var lenBuf = new ArrayBuffer(4);
+    new DataView(lenBuf).setUint32(0, header.length, false);
 
-    function formatSize(bytes) {
-        if (bytes < 1024) return bytes + ' B';
-        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-        if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-        return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
-    }
+    var reader = new FileReader();
+    reader.onload = function() {
+      var total = 4 + header.length + reader.result.byteLength;
+      var buf = new ArrayBuffer(total);
+      var u8 = new Uint8Array(buf);
+      u8.set(new Uint8Array(lenBuf), 0);
+      u8.set(header, 4);
+      u8.set(new Uint8Array(reader.result), 4 + header.length);
 
-    function formatSpeed(bytesPerSecond) {
-        if (bytesPerSecond < 1024) return bytesPerSecond.toFixed(0) + ' B/s';
-        if (bytesPerSecond < 1024 * 1024) return (bytesPerSecond / 1024).toFixed(1) + ' KB/s';
-        return (bytesPerSecond / (1024 * 1024)).toFixed(1) + ' MB/s';
-    }
+      try {
+        state.channel.send(buf);
+      } catch {
+        emit('error', { message: 'Send failed' });
+        return;
+      }
 
-    function sendFiles(peerId, files) {
-        var channel = window.WebRTC ? window.WebRTC.getDataChannel(peerId) : null;
-        if (!channel || channel.readyState !== 'open') {
-            emit('error', { peerId: peerId, message: 'Data channel not open' });
-            return false;
-        }
+      state.offset = end;
+      state.fileSent = end;
+      var pct = file.size > 0 ? (state.fileSent / file.size * 100) : 0;
+      var elapsed = (Date.now() - state.start) / 1000;
+      var speed = elapsed > 0 ? (state.sent + state.fileSent) / elapsed : 0;
 
-        var fileArray = Array.isArray(files) ? files : [files];
+      emit('progress', {
+        fileName: file.name, fileIndex: state.idx, totalFiles: state.files.length,
+        percent: Math.min(pct, 100), speed: speed, speedText: formatSpeed(speed)
+      });
 
-        var state = {
-            files: fileArray,
-            currentFile: 0,
-            chunkOffset: 0,
-            progress: 0,
-            speed: 0,
-            startTime: Date.now(),
-            totalSent: 0,
-            fileSent: 0,
-            channel: channel
-        };
-
-        transfers[peerId] = state;
-
-        sendFileMeta(peerId, state);
-        return true;
-    }
-
-    function sendFileMeta(peerId, state) {
-        var file = state.files[state.currentFile];
-        var meta = {
-            type: 'file-meta',
-            name: file.name,
-            size: file.size,
-            mimeType: file.type || 'application/octet-stream',
-            totalFiles: state.files.length,
-            fileIndex: state.currentFile
-        };
-
-        state.channel.send(JSON.stringify(meta));
-
-        state.fileSent = 0;
-        state.chunkOffset = 0;
-
-        emit('send-start', {
-            peerId: peerId,
-            fileName: file.name,
-            fileSize: file.size,
-            totalFiles: state.files.length,
-            fileIndex: state.currentFile
-        });
-
-        readAndSendChunk(peerId);
-    }
-
-    function readAndSendChunk(peerId) {
-        var state = transfers[peerId];
-        if (!state) return;
-
-        var file = state.files[state.currentFile];
-
-        if (state.chunkOffset >= file.size) {
-            state.channel.send(JSON.stringify({ type: 'file-end', fileIndex: state.currentFile }));
-
-            state.totalSent += file.size;
-
-            emit('file-sent', {
-                peerId: peerId,
-                fileName: file.name,
-                fileIndex: state.currentFile,
-                totalFiles: state.files.length
-            });
-
-            state.currentFile++;
-            state.fileSent = 0;
-
-            if (state.currentFile < state.files.length) {
-                sendFileMeta(peerId, state);
-            } else {
-                delete transfers[peerId];
-                emit('transfer-complete', { peerId: peerId });
-            }
-            return;
-        }
-
-        var end = Math.min(state.chunkOffset + CHUNK_SIZE, file.size);
-        var slice = file.slice(state.chunkOffset, end);
-
-        var header = JSON.stringify({
-            type: 'file-chunk',
-            fileIndex: state.currentFile
-        });
-        var headerBytes = new TextEncoder().encode(header);
-        var headerLenBuffer = new ArrayBuffer(4);
-        var headerLenView = new DataView(headerLenBuffer);
-        headerLenView.setUint32(0, headerBytes.length, false);
-
-        var totalLen = 4 + headerBytes.length + (end - state.chunkOffset);
-        var buffer = new ArrayBuffer(totalLen);
-        var uint8 = new Uint8Array(buffer);
-        uint8.set(new Uint8Array(headerLenBuffer), 0);
-        uint8.set(headerBytes, 4);
-
-        var reader = new FileReader();
-        reader.onload = function() {
-            uint8.set(new Uint8Array(reader.result), 4 + headerBytes.length);
-
-            try {
-                state.channel.send(buffer);
-            } catch (e) {
-                emit('error', { peerId: peerId, message: 'Failed to send chunk' });
-                return;
-            }
-
-            state.chunkOffset = end;
-            state.fileSent = Math.min(end, file.size);
-
-            var totalForFile = file.size;
-            var percent = totalForFile > 0 ? (state.fileSent / totalForFile * 100) : 0;
-
-            var elapsed = (Date.now() - state.startTime) / 1000;
-            var totalBytes = state.totalSent + state.fileSent;
-            state.speed = elapsed > 0 ? totalBytes / elapsed : 0;
-
-            emit('progress', {
-                peerId: peerId,
-                fileName: file.name,
-                fileIndex: state.currentFile,
-                totalFiles: state.files.length,
-                percent: Math.min(percent, 100),
-                sent: state.fileSent,
-                total: totalForFile,
-                speed: state.speed,
-                speedFormatted: formatSpeed(state.speed)
-            });
-
-            setTimeout(function() {
-                readAndSendChunk(peerId);
-            }, 0);
-        };
-
-        reader.readAsArrayBuffer(slice);
-    }
-
-    function handleIncomingData(peerId, data) {
-        if (data.type === 'file-meta') {
-            var incoming = getIncomingState(peerId);
-
-            if (data.fileIndex === 0 || incoming.files.length <= data.fileIndex) {
-                incoming.files[data.fileIndex] = {
-                    name: data.name,
-                    size: data.size,
-                    mimeType: data.mimeType,
-                    parts: [],
-                    received: 0
-                };
-            }
-
-            incoming.totalFiles = data.totalFiles;
-            incoming.currentFile = data.fileIndex;
-
-            emit('receive-start', {
-                peerId: peerId,
-                fileName: data.name,
-                fileSize: data.size,
-                totalFiles: data.totalFiles,
-                fileIndex: data.fileIndex
-            });
-
-        } else if (data.type === 'file-chunk') {
-            var incoming = getIncomingState(peerId);
-            var fileIdx = data.fileIndex !== undefined ? data.fileIndex : incoming.currentFile;
-            var fileInfo = incoming.files[fileIdx];
-
-            if (fileInfo) {
-                fileInfo.parts.push(data.chunk);
-                fileInfo.received += data.chunk.byteLength || data.chunk.length || 0;
-
-                var elapsed = (Date.now() - incoming.startTime) / 1000;
-                var speed = elapsed > 0 ? incoming.totalReceived / elapsed : 0;
-                incoming.totalReceived += data.chunk.byteLength || data.chunk.length || 0;
-
-                var percent = fileInfo.size > 0 ? (fileInfo.received / fileInfo.size * 100) : 0;
-
-                emit('progress', {
-                    peerId: peerId,
-                    fileName: fileInfo.name,
-                    fileIndex: fileIdx,
-                    totalFiles: incoming.totalFiles,
-                    percent: Math.min(percent, 100),
-                    received: fileInfo.received,
-                    total: fileInfo.size,
-                    speed: speed,
-                    speedFormatted: formatSpeed(speed)
-                });
-            }
-
-        } else if (data.type === 'file-end') {
-            var incoming = getIncomingState(peerId);
-            var fileIdx = data.fileIndex !== undefined ? data.fileIndex : incoming.currentFile;
-            var fileInfo = incoming.files[fileIdx];
-
-            if (fileInfo) {
-                var blob = new Blob(fileInfo.parts, { type: fileInfo.mimeType });
-
-                emit('file-received', {
-                    peerId: peerId,
-                    fileName: fileInfo.name,
-                    fileSize: blob.size,
-                    fileIndex: fileIdx,
-                    totalFiles: incoming.totalFiles,
-                    blob: blob
-                });
-
-                var url = URL.createObjectURL(blob);
-                var a = document.createElement('a');
-                a.href = url;
-                a.download = fileInfo.name;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-
-                setTimeout(function() {
-                    URL.revokeObjectURL(url);
-                }, 5000);
-
-                if (fileIdx + 1 >= incoming.totalFiles) {
-                    delete incoming.files;
-                    delete incomingState[peerId];
-                    emit('transfer-complete', { peerId: peerId });
-                }
-            }
-
-        } else if (data.type === 'text') {
-            emit('text-received', {
-                peerId: peerId,
-                text: data.text
-            });
-        }
-    }
-
-    var incomingState = {};
-
-    function getIncomingState(peerId) {
-        if (!incomingState[peerId]) {
-            incomingState[peerId] = {
-                files: {},
-                totalFiles: 0,
-                currentFile: 0,
-                startTime: Date.now(),
-                totalReceived: 0
-            };
-        }
-        return incomingState[peerId];
-    }
-
-    function cancelTransfer(peerId) {
-        delete transfers[peerId];
-        delete incomingState[peerId];
-    }
-
-    window.Transfer = {
-        sendFiles: sendFiles,
-        handleIncomingData: handleIncomingData,
-        formatSize: formatSize,
-        formatSpeed: formatSpeed,
-        cancelTransfer: cancelTransfer,
-        on: on,
-        off: off
+      setTimeout(function() { sendChunk(state); }, 0);
     };
+    reader.readAsArrayBuffer(slice);
+  }
+
+  function handleMessage(peerId, msg) {
+    if (msg.type === 'file-meta') {
+      var s = getIncoming(peerId);
+      s.files[msg.fileIndex] = { name: msg.name, size: msg.size, mimeType: msg.mimeType, parts: [], received: 0 };
+      s.totalFiles = msg.totalFiles;
+      s.currentFile = msg.fileIndex;
+      emit('receive-start', { peerId: peerId, fileName: msg.name, fileSize: msg.size, fileIndex: msg.fileIndex, totalFiles: msg.totalFiles });
+    } else if (msg.type === 'file-end') {
+      var s = getIncoming(peerId);
+      var fi = s.files[msg.fileIndex];
+      if (fi) {
+        var blob = new Blob(fi.parts, { type: fi.mimeType });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = fi.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function() { URL.revokeObjectURL(url); }, 5000);
+        emit('file-received', { peerId: peerId, fileName: fi.name, fileIndex: msg.fileIndex });
+        if (msg.fileIndex + 1 >= s.totalFiles) {
+          delete incoming[peerId];
+          emit('transfer-complete');
+        }
+      }
+    }
+  }
+
+  function handleChunk(peerId, fileIndex, chunk) {
+    var s = getIncoming(peerId);
+    var fi = s.files[fileIndex];
+    if (fi) {
+      fi.parts.push(chunk);
+      fi.received += chunk.byteLength || 0;
+      var pct = fi.size > 0 ? (fi.received / fi.size * 100) : 0;
+      var elapsed = (Date.now() - s.start) / 1000;
+      var speed = elapsed > 0 ? s.totalReceived / elapsed : 0;
+      s.totalReceived += chunk.byteLength || 0;
+      emit('progress', {
+        peerId: peerId, fileName: fi.name, fileIndex: fileIndex,
+        percent: Math.min(pct, 100), speed: speed, speedText: formatSpeed(speed)
+      });
+    }
+  }
+
+  function getIncoming(peerId) {
+    if (!incoming[peerId]) {
+      incoming[peerId] = { files: {}, totalFiles: 0, currentFile: 0, start: Date.now(), totalReceived: 0 };
+    }
+    return incoming[peerId];
+  }
+
+  window.Transfer = { sendFiles: sendFiles, handleMessage: handleMessage, handleChunk: handleChunk, formatSize: formatSize, formatSpeed: formatSpeed, on: on };
 })();

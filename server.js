@@ -5,7 +5,6 @@ const { WebSocketServer } = require('ws');
 const helmet = require('helmet');
 const compression = require('compression');
 const path = require('path');
-const fs = require('fs');
 const crypto = require('crypto');
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -17,19 +16,20 @@ const ROOM_TTL = parseInt(process.env.ROOM_TTL_MS || '1800000', 10);
 const app = express();
 const server = http.createServer(app);
 
+const clientPath = path.join(__dirname, 'client');
+
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
 }));
 app.use(compression());
-
-const clientPath = path.join(__dirname, 'client');
-app.use(express.static(clientPath, {
-  maxAge: '1h',
-  etag: true,
-}));
+app.use(express.static(clientPath, { maxAge: '1h', etag: true }));
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
+
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(clientPath, 'index.html'));
+});
 
 const rooms = new Map();
 const clients = new Map();
@@ -64,15 +64,6 @@ function isRateLimited(clientId) {
   return client.messageCount > RATE_LIMIT_MAX;
 }
 
-function cleanupRoom(roomId) {
-  const room = rooms.get(roomId);
-  if (!room) return;
-  if (room.peers.size === 0) {
-    rooms.delete(roomId);
-    console.log(`[Room] Cleaned up empty room: ${roomId}`);
-  }
-}
-
 const wss = new WebSocketServer({ server });
 
 wss.on('connection', (ws) => {
@@ -88,24 +79,18 @@ wss.on('connection', (ws) => {
     windowStart: Date.now(),
   });
 
-  ws.send(JSON.stringify({ type: 'welcome', clientId }));
+  wsSend(ws, { type: 'welcome', clientId });
 
   ws.on('pong', () => { ws.isAlive = true; });
 
   ws.on('message', (data) => {
     if (isRateLimited(clientId)) {
-      ws.send(JSON.stringify({ type: 'error', message: 'Rate limit exceeded. Please wait.' }));
+      wsSend(ws, { type: 'error', message: 'Rate limit exceeded.' });
       return;
     }
-
     let msg;
-    try {
-      msg = JSON.parse(data.toString());
-    } catch {
-      return;
-    }
-
-    handleSignalingMessage(clientId, msg);
+    try { msg = JSON.parse(data.toString()); } catch { return; }
+    handleMessage(clientId, msg);
   });
 
   ws.on('close', () => {
@@ -126,42 +111,33 @@ wss.on('connection', (ws) => {
   });
 });
 
-function handleSignalingMessage(clientId, msg) {
+function handleMessage(clientId, msg) {
   const client = clients.get(clientId);
   if (!client) return;
 
   switch (msg.type) {
     case 'create-room': {
       const roomId = generateRoomCode();
-      rooms.set(roomId, {
-        peers: new Map(),
-        createdAt: Date.now(),
-        ttl: ROOM_TTL,
-      });
+      rooms.set(roomId, { peers: new Map(), createdAt: Date.now(), ttl: ROOM_TTL });
       joinRoom(clientId, roomId, msg.deviceInfo);
-      wsSend(client.ws, {
-        type: 'room-created',
-        roomId,
-      });
+      wsSend(client.ws, { type: 'room-created', roomId });
       break;
     }
-
     case 'join-room': {
       const roomId = (msg.roomId || '').toUpperCase().trim();
       const room = rooms.get(roomId);
       if (!room) {
-        wsSend(client.ws, { type: 'error', message: 'Room not found. Check the code and try again.' });
+        wsSend(client.ws, { type: 'error', message: 'Room not found.' });
         return;
       }
       if (room.peers.size >= 10) {
-        wsSend(client.ws, { type: 'error', message: 'Room is full (max 10 devices).' });
+        wsSend(client.ws, { type: 'error', message: 'Room is full (max 10).' });
         return;
       }
       joinRoom(clientId, roomId, msg.deviceInfo);
       wsSend(client.ws, { type: 'room-joined', roomId });
       break;
     }
-
     case 'leave-room': {
       if (client.roomId) {
         const room = rooms.get(client.roomId);
@@ -178,25 +154,13 @@ function handleSignalingMessage(clientId, msg) {
       }
       break;
     }
-
     case 'signal': {
-      if (!client.roomId) {
-        wsSend(client.ws, { type: 'error', message: 'Not in a room.' });
-        return;
-      }
+      if (!client.roomId) return;
       const target = clients.get(msg.targetId);
-      if (!target || target.roomId !== client.roomId) {
-        wsSend(client.ws, { type: 'error', message: 'Target peer not found in room.' });
-        return;
-      }
-      wsSend(target.ws, {
-        type: 'signal',
-        fromId: clientId,
-        signal: msg.signal,
-      });
+      if (!target || target.roomId !== client.roomId) return;
+      wsSend(target.ws, { type: 'signal', fromId: clientId, signal: msg.signal });
       break;
     }
-
     case 'transfer-request': {
       if (!client.roomId) return;
       const target = clients.get(msg.targetId);
@@ -210,7 +174,6 @@ function handleSignalingMessage(clientId, msg) {
       });
       break;
     }
-
     case 'transfer-response': {
       if (!client.roomId) return;
       const target = clients.get(msg.targetId);
@@ -222,7 +185,6 @@ function handleSignalingMessage(clientId, msg) {
       });
       break;
     }
-
     case 'text-send': {
       if (!client.roomId) return;
       const target = clients.get(msg.targetId);
@@ -235,7 +197,6 @@ function handleSignalingMessage(clientId, msg) {
       });
       break;
     }
-
     case 'rename': {
       if (client.deviceInfo) {
         client.deviceInfo.name = sanitize(msg.name) || client.deviceInfo.name;
@@ -255,37 +216,26 @@ function handleSignalingMessage(clientId, msg) {
 function joinRoom(clientId, roomId, deviceInfo) {
   const client = clients.get(clientId);
   if (!client) return;
-
   const room = rooms.get(roomId);
+  if (!room) return;
 
   const existingPeers = [];
   for (const [peerId, peerInfo] of room.peers) {
     existingPeers.push({ peerId, ...peerInfo });
   }
 
-  room.peers.set(clientId, {
-    name: sanitize(deviceInfo?.name) || 'Unknown Device',
-    platform: deviceInfo?.platform || 'unknown',
-    icon: deviceInfo?.icon || 'desktop',
-  });
-
-  client.roomId = roomId;
-  client.deviceInfo = {
+  const info = {
     name: sanitize(deviceInfo?.name) || 'Unknown Device',
     platform: deviceInfo?.platform || 'unknown',
     icon: deviceInfo?.icon || 'desktop',
   };
 
-  wsSend(client.ws, {
-    type: 'room-peers',
-    peers: existingPeers,
-  });
+  room.peers.set(clientId, info);
+  client.roomId = roomId;
+  client.deviceInfo = info;
 
-  broadcastToRoom(roomId, {
-    type: 'peer-joined',
-    peerId: clientId,
-    ...client.deviceInfo,
-  }, clientId);
+  wsSend(client.ws, { type: 'room-peers', peers: existingPeers });
+  broadcastToRoom(roomId, { type: 'peer-joined', peerId: clientId, ...info }, clientId);
 }
 
 function broadcastToRoom(roomId, message, excludeId) {
@@ -294,15 +244,20 @@ function broadcastToRoom(roomId, message, excludeId) {
   for (const [peerId] of room.peers) {
     if (peerId === excludeId) continue;
     const peer = clients.get(peerId);
-    if (peer) {
-      wsSend(peer.ws, message);
-    }
+    if (peer) wsSend(peer.ws, message);
   }
 }
 
 function wsSend(ws, message) {
   if (ws.readyState === ws.OPEN) {
     ws.send(JSON.stringify(message));
+  }
+}
+
+function cleanupRoom(roomId) {
+  const room = rooms.get(roomId);
+  if (room && room.peers.size === 0) {
+    rooms.delete(roomId);
   }
 }
 
@@ -328,22 +283,11 @@ function cleanupExpiredRooms() {
         }
       }
       rooms.delete(roomId);
-      console.log(`[Room] Expired room: ${roomId}`);
     }
   }
 }
 setInterval(cleanupExpiredRooms, 60000);
 
-app.get('*', (_req, res) => {
-  res.sendFile(path.join(clientPath, 'index.html'));
-});
-
 server.listen(PORT, HOST, () => {
   console.log(`[Chaminda Drop] Server running on ${HOST}:${PORT}`);
-  console.log(`[Chaminda Drop] Serving client from ${clientPath}`);
-});
-
-process.on('SIGTERM', () => {
-  wss.close();
-  server.close(() => process.exit(0));
 });

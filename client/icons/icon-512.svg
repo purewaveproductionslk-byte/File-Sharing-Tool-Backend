@@ -1,13 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#06d6a0"/>
-      <stop offset="100%" stop-color="#7b61ff"/>
+      <stop offset="50%" stop-color="#7b61ff"/>
+      <stop offset="100%" stop-color="#ff6b9d"/>
     </linearGradient>
   </defs>
-  <rect width="512" height="512" rx="108" fill="url(#bg)"/>
-  <g transform="translate(256,256)">
-    <path d="M0,-110 L55,-30 L22,-30 L22,55 L-22,55 L-22,-30 L-55,-30 Z" fill="white" opacity="0.95"/>
-    <path d="M-80,30 L-80,80 Q-80,100 -60,100 L60,100 Q80,100 80,80 L80,30" fill="none" stroke="white" stroke-width="16" stroke-linecap="round" opacity="0.7"/>
-  </g>
+  <rect width="512" height="512" rx="100" fill="url(#g)"/>
+  <path d="M256 120 L256 120 L296 200 L268 200 L268 292 L244 292 L244 200 L216 200 Z" fill="white" opacity="0.95"/>
+  <path d="M180 310 L180 284 L196 284 L196 310 L220 310 L220 326 L180 326 Z" fill="white" opacity="0.7"/>
+  <path d="M316 284 L332 284 L332 310 L316 310 L316 326 L316 326 L316 284 Z" fill="white" opacity="0.7"/>
 </svg>
