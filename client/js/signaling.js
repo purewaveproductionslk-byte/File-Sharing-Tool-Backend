@@ -6,6 +6,7 @@
 
   function getUrl() {
     if (window.WS_SERVER) return window.WS_SERVER;
+    if (location.protocol === 'file:') return 'ws://localhost:3000';
     var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     return proto + '//' + location.host;
   }

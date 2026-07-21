@@ -15,7 +15,7 @@
     for (var r = 0; r < count; r++) {
       for (var c = 0; c < count; c++) {
         if (modules[r][c]) {
-          ctx.fillStyle = '#1a1a2e';
+          ctx.fillStyle = '#05070f';
           ctx.beginPath();
           ctx.roundRect(c * mSize + 0.5, r * mSize + 0.5, mSize - 1, mSize - 1, 1);
           ctx.fill();
@@ -24,8 +24,8 @@
     }
 
     var grad = ctx.createLinearGradient(0, 0, size, size);
-    grad.addColorStop(0, 'rgba(6,214,160,0.15)');
-    grad.addColorStop(1, 'rgba(123,97,255,0.15)');
+    grad.addColorStop(0, 'rgba(0, 245, 212, 0.15)');
+    grad.addColorStop(1, 'rgba(139, 92, 246, 0.15)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, size, size);
 

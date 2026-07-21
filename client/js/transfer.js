@@ -25,11 +25,13 @@
     return (bps / 1048576).toFixed(1) + ' MB/s';
   }
 
+  var BUFFER_MAX = 1024 * 1024; // 1 MB
+
   function sendFiles(peerId, files) {
     var ch = WebRTC.getChannel(peerId);
     if (!ch || ch.readyState !== 'open') return false;
 
-    var state = { files: files, idx: 0, offset: 0, sent: 0, start: Date.now(), channel: ch };
+    var state = { peerId: peerId, files: files, idx: 0, offset: 0, sent: 0, start: Date.now(), channel: ch };
 
     sendMeta(state);
     return true;
@@ -51,12 +53,12 @@
     if (state.offset >= file.size) {
       state.channel.send(JSON.stringify({ type: 'file-end', fileIndex: state.idx }));
       state.sent += file.size;
-      emit('file-sent', { fileName: file.name, fileIndex: state.idx });
+      emit('file-sent', { peerId: state.peerId, fileName: file.name, fileIndex: state.idx });
       state.idx++;
       if (state.idx < state.files.length) {
         sendMeta(state);
       } else {
-        emit('transfer-complete');
+        emit('transfer-complete', { peerId: state.peerId });
       }
       return;
     }
@@ -91,11 +93,19 @@
       var speed = elapsed > 0 ? (state.sent + state.fileSent) / elapsed : 0;
 
       emit('progress', {
+        peerId: state.peerId,
         fileName: file.name, fileIndex: state.idx, totalFiles: state.files.length,
         percent: Math.min(pct, 100), speed: speed, speedText: formatSpeed(speed)
       });
 
-      setTimeout(function() { sendChunk(state); }, 0);
+      if (state.channel.bufferedAmount > BUFFER_MAX) {
+        state.channel.onbufferedamountlow = function() {
+          state.channel.onbufferedamountlow = null;
+          sendChunk(state);
+        };
+      } else {
+        setTimeout(function() { sendChunk(state); }, 0);
+      }
     };
     reader.readAsArrayBuffer(slice);
   }
@@ -123,7 +133,7 @@
         emit('file-received', { peerId: peerId, fileName: fi.name, fileIndex: msg.fileIndex });
         if (msg.fileIndex + 1 >= s.totalFiles) {
           delete incoming[peerId];
-          emit('transfer-complete');
+          emit('transfer-complete', { peerId: peerId });
         }
       }
     }

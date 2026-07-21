@@ -3,7 +3,7 @@
   var COUNT = 80;
   var CONNECT_DIST = 130;
   var MOUSE_DIST = 200;
-  var colors = ['#06d6a0', '#7b61ff', '#ff6b9d'];
+  var colors = ['#00f5d4', '#8b5cf6', '#ec4899'];
 
   function init() {
     canvas = document.getElementById('particles');

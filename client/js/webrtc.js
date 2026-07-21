@@ -47,6 +47,7 @@
 
   function setupChannel(peerId, ch) {
     ch.binaryType = 'arraybuffer';
+    ch.bufferedAmountLowThreshold = 65536; // 64 KB
     ch.onopen = function() {
       channels[peerId] = ch;
       emit('channel-open', { peerId: peerId });
@@ -94,6 +95,12 @@
     if (signal.type === 'offer') {
       var pc = createPeer(peerId, false);
       pc.setRemoteDescription(new RTCSessionDescription(signal.sdp)).then(function() {
+        if (pc.iceQueue) {
+          pc.iceQueue.forEach(function(cand) {
+            pc.addIceCandidate(new RTCIceCandidate(cand)).catch(function() {});
+          });
+          pc.iceQueue = [];
+        }
         return pc.createAnswer();
       }).then(function(ans) {
         return pc.setLocalDescription(ans);
@@ -102,10 +109,26 @@
       }).catch(function() {});
     } else if (signal.type === 'answer') {
       var pc = pcs[peerId];
-      if (pc) pc.setRemoteDescription(new RTCSessionDescription(signal.sdp)).catch(function() {});
+      if (pc) {
+        pc.setRemoteDescription(new RTCSessionDescription(signal.sdp)).then(function() {
+          if (pc.iceQueue) {
+            pc.iceQueue.forEach(function(cand) {
+              pc.addIceCandidate(new RTCIceCandidate(cand)).catch(function() {});
+            });
+            pc.iceQueue = [];
+          }
+        }).catch(function() {});
+      }
     } else if (signal.type === 'ice-candidate') {
       var pc = pcs[peerId];
-      if (pc && signal.candidate) pc.addIceCandidate(new RTCIceCandidate(signal.candidate)).catch(function() {});
+      if (pc && signal.candidate) {
+        if (pc.remoteDescription && pc.remoteDescription.type) {
+          pc.addIceCandidate(new RTCIceCandidate(signal.candidate)).catch(function() {});
+        } else {
+          if (!pc.iceQueue) pc.iceQueue = [];
+          pc.iceQueue.push(signal.candidate);
+        }
+      }
     }
   }
 

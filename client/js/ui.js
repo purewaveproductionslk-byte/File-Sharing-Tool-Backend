@@ -33,7 +33,7 @@
   }
 
   function deviceIconSVG(type) {
-    var color = type === 'phone' ? '#06d6a0' : type === 'tablet' ? '#7b61ff' : '#ff6b9d';
+    var color = type === 'phone' ? '#00f5d4' : type === 'tablet' ? '#8b5cf6' : '#ec4899';
     if (type === 'phone') return '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="' + color + '" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>';
     if (type === 'tablet') return '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="' + color + '" stroke-width="1.5"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>';
     if (type === 'laptop') return '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="' + color + '" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="2" y1="20" x2="22" y2="20"/></svg>';

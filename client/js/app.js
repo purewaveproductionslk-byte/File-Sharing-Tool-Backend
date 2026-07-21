@@ -7,7 +7,8 @@
     selectedPeer: null,
     pendingFiles: [],
     pendingTarget: null,
-    transferCounter: 0
+    transferCounter: 0,
+    activeTransfers: {}
   };
 
   document.addEventListener('DOMContentLoaded', function() {
@@ -107,10 +108,6 @@
       }
     });
 
-    Signaling.on('signal', function(msg) {
-      WebRTC.handleSignal({ peerId: msg.fromId, signal: msg.signal });
-    });
-
     Signaling.on('transfer-request', function(msg) {
       UI.playSound('transfer');
       var singleMode = Object.keys(state.peers).length <= 2;
@@ -133,10 +130,9 @@
     Signaling.on('transfer-response', function(msg) {
       if (msg.accepted && state.pendingFiles.length > 0) {
         var id = ++state.transferCounter;
+        state.activeTransfers[msg.fromId] = id;
         var totalSize = state.pendingFiles.reduce(function(s, f) { return s + f.size; }, 0);
         UI.addTransferItem(id, state.pendingFiles[0].name, state.pendingFiles.length, totalSize);
-        Transfer.on('progress', function(p) { UI.updateTransferProgress(id, p.percent, p.speedText); });
-        Transfer.on('file-sent', function() { UI.updateTransferProgress(id, 100, 'Done'); });
         Transfer.sendFiles(msg.fromId, state.pendingFiles);
         state.pendingFiles = [];
       } else if (!msg.accepted) {
@@ -156,6 +152,7 @@
 
     Transfer.on('receive-start', function(d) {
       var id = ++state.transferCounter;
+      state.activeTransfers[d.peerId] = id;
       UI.addTransferItem(id, d.fileName, d.totalFiles, d.fileSize);
     });
 
@@ -163,7 +160,26 @@
       UI.showToast('Received: ' + d.fileName, 'success');
     });
 
-    Transfer.on('transfer-complete', function() {
+    Transfer.on('progress', function(p) {
+      var id = state.activeTransfers[p.peerId];
+      if (id) {
+        UI.updateTransferProgress(id, p.percent, p.speedText);
+      }
+    });
+
+    Transfer.on('file-sent', function(p) {
+      var id = state.activeTransfers[p.peerId];
+      if (id) {
+        UI.updateTransferProgress(id, 100, 'Done');
+      }
+    });
+
+    Transfer.on('transfer-complete', function(d) {
+      var id = state.activeTransfers[d.peerId];
+      if (id) {
+        UI.updateTransferProgress(id, 100, 'Done');
+        delete state.activeTransfers[d.peerId];
+      }
       UI.showToast('Transfer complete!', 'success');
       UI.playSound('transfer');
     });
