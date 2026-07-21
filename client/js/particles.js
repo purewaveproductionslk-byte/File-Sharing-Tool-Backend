@@ -1,12 +1,12 @@
 (function() {
   var canvas, ctx, particles = [], mouse = { x: -9999, y: -9999 };
-  var COUNT = 80;
-  var CONNECT_DIST = 130;
-  var MOUSE_DIST = 200;
-  var colors = ['#00f5d4', '#8b5cf6', '#ec4899'];
+  var COUNT = 50;
+  var CONNECT_DIST = 120;
+  var MOUSE_DIST = 160;
+  var colors = ['#00f5d4', '#a855f7', '#f43f5e'];
 
   function init() {
-    canvas = document.getElementById('particles');
+    canvas = document.getElementById('bgCanvas');
     if (!canvas) return;
     ctx = canvas.getContext('2d');
     resize();
@@ -15,8 +15,6 @@
     document.addEventListener('mousemove', function(e) {
       mouse.x = e.clientX;
       mouse.y = e.clientY;
-      document.documentElement.style.setProperty('--mouse-x', e.clientX + 'px');
-      document.documentElement.style.setProperty('--mouse-y', e.clientY + 'px');
     });
     document.addEventListener('mouseleave', function() { mouse.x = -9999; mouse.y = -9999; });
     animate();
@@ -27,15 +25,15 @@
     canvas.height = window.innerHeight;
   }
 
-  function create(randomY) {
+  function create(randomPos) {
     return {
-      x: Math.random() * canvas.width,
-      y: randomY ? Math.random() * canvas.height : canvas.height + 10,
-      vx: (Math.random() - 0.5) * 0.4,
-      vy: -(Math.random() * 0.3 + 0.1),
-      r: Math.random() * 2 + 0.8,
+      x: randomPos ? Math.random() * canvas.width : Math.random() * canvas.width,
+      y: randomPos ? Math.random() * canvas.height : canvas.height + 10,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: (Math.random() - 0.5) * 0.3 - 0.1,
+      r: Math.random() * 1.5 + 0.5,
       color: colors[Math.floor(Math.random() * colors.length)],
-      alpha: Math.random() * 0.4 + 0.2
+      alpha: Math.random() * 0.3 + 0.1
     };
   }
 
@@ -52,14 +50,14 @@
       var dist = Math.sqrt(dx * dx + dy * dy);
       if (dist < MOUSE_DIST) {
         var force = (MOUSE_DIST - dist) / MOUSE_DIST;
-        p.x -= dx * force * 0.02;
-        p.y -= dy * force * 0.02;
+        p.x -= dx * force * 0.015;
+        p.y -= dy * force * 0.015;
       }
 
-      if (p.y < -10 || p.x < -10 || p.x > canvas.width + 10) {
-        particles[i] = create(false);
-        particles[i].x = Math.random() * canvas.width;
-      }
+      if (p.x < -20) p.x = canvas.width + 10;
+      if (p.x > canvas.width + 20) p.x = -10;
+      if (p.y < -20) p.y = canvas.height + 10;
+      if (p.y > canvas.height + 20) p.y = -10;
 
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
@@ -77,12 +75,9 @@
           ctx.beginPath();
           ctx.moveTo(particles[i].x, particles[i].y);
           ctx.lineTo(particles[j].x, particles[j].y);
-          var grad = ctx.createLinearGradient(particles[i].x, particles[i].y, particles[j].x, particles[j].y);
-          grad.addColorStop(0, particles[i].color);
-          grad.addColorStop(1, particles[j].color);
-          ctx.strokeStyle = grad;
-          ctx.globalAlpha = 0.12 * (1 - dist / CONNECT_DIST);
-          ctx.lineWidth = 0.6;
+          ctx.strokeStyle = particles[i].color;
+          ctx.globalAlpha = 0.08 * (1 - dist / CONNECT_DIST);
+          ctx.lineWidth = 0.5;
           ctx.stroke();
         }
       }

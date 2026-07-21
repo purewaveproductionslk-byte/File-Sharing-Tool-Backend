@@ -39,11 +39,6 @@
     }, 4000);
   }
 
-  function toggleTheme() {
-    var dark = document.body.getAttribute('data-theme') !== 'light';
-    document.body.setAttribute('data-theme', dark ? 'light' : 'dark');
-  }
-
   function showModal(id) {
     var m = document.getElementById(id);
     if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
@@ -61,35 +56,63 @@
     return (b / 1073741824).toFixed(2) + ' GB';
   }
 
-  function deviceIconSVG(type) {
-    var color = type === 'phone' ? '#00f5d4' : type === 'tablet' ? '#8b5cf6' : '#ec4899';
-    if (type === 'phone') return '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="' + color + '" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>';
-    if (type === 'tablet') return '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="' + color + '" stroke-width="1.5"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>';
-    if (type === 'laptop') return '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="' + color + '" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="2" y1="20" x2="22" y2="20"/></svg>';
-    return '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="' + color + '" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>';
+  function formatSpeed(bps) {
+    if (bps < 1024) return bps.toFixed(0) + ' B/s';
+    if (bps < 1048576) return (bps / 1024).toFixed(1) + ' KB/s';
+    return (bps / 1048576).toFixed(1) + ' MB/s';
   }
 
-  function updatePeerGrid(peers, selectedId) {
-    var grid = document.getElementById('peersGrid');
-    if (!grid) return;
-    grid.innerHTML = '';
+  function deviceIconSVG(type) {
+    var color = type === 'phone' ? '#00f5d4' : type === 'tablet' ? '#a855f7' : '#f43f5e';
+    if (type === 'phone') return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="' + color + '" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>';
+    if (type === 'tablet') return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="' + color + '" stroke-width="1.5"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>';
+    if (type === 'laptop') return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="' + color + '" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="2" y1="20" x2="22" y2="20"/></svg>';
+    return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="' + color + '" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>';
+  }
+
+  function updateOrbitPeers(peers, selectedId) {
+    var container = document.getElementById('orbitContainer');
+    if (!container) return;
+
+    var existing = container.querySelectorAll('.peer-satellite, .orbit-empty');
+    for (var i = 0; i < existing.length; i++) existing[i].remove();
+
     if (!peers || peers.length === 0) {
-      grid.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;grid-column:1/-1;text-align:center">No peers yet. Share the room code.</p>';
+      var empty = document.createElement('div');
+      empty.className = 'orbit-empty';
+      empty.textContent = 'No peers yet. Share the room code.';
+      container.appendChild(empty);
       return;
     }
-    peers.forEach(function(p) {
-      var card = document.createElement('div');
-      card.className = 'peer-card' + (p.id === selectedId ? ' selected' : '');
-      card.innerHTML = '<div class="peer-icon">' + deviceIconSVG(p.icon) + '</div>' +
-        '<span class="peer-name">' + esc(p.name) + '</span>' +
-        '<span class="peer-platform">' + esc(p.platform) + '</span>';
-      card.addEventListener('click', function() {
+
+    var containerSize = container.offsetWidth || 280;
+    var radius = containerSize * 0.38;
+    var centerX = containerSize / 2;
+    var centerY = containerSize / 2;
+    var count = peers.length;
+
+    peers.forEach(function(p, idx) {
+      var angle = (2 * Math.PI * idx) / count - Math.PI / 2;
+      var x = centerX + radius * Math.cos(angle);
+      var y = centerY + radius * Math.sin(angle);
+
+      var sat = document.createElement('div');
+      sat.className = 'peer-satellite' + (p.id === selectedId ? ' selected' : '');
+      sat.style.left = x + 'px';
+      sat.style.top = y + 'px';
+      sat.style.marginLeft = '-28px';
+      sat.style.marginTop = '-28px';
+      sat.innerHTML = deviceIconSVG(p.icon) +
+        '<span class="satellite-label">' + esc(p.name) + '</span>';
+
+      sat.addEventListener('click', function() {
         if (window.App) App.selectPeer(p.id);
-        document.querySelectorAll('.peer-card').forEach(function(c) { c.classList.remove('selected'); });
-        card.classList.add('selected');
-        showModal('actionModal');
+        var allSats = container.querySelectorAll('.peer-satellite');
+        for (var j = 0; j < allSats.length; j++) allSats[j].classList.remove('selected');
+        sat.classList.add('selected');
       });
-      grid.appendChild(card);
+
+      container.appendChild(sat);
     });
   }
 
@@ -115,9 +138,9 @@
   }
 
   function addTransferItem(id, fileName, total, totalSize) {
-    var panel = document.getElementById('transferPanel');
+    var tray = document.getElementById('transferTray');
     var list = document.getElementById('transferList');
-    panel.classList.remove('hidden');
+    tray.classList.remove('hidden');
     var item = document.createElement('div');
     item.className = 'transfer-item';
     item.id = 'tr-' + id;
@@ -167,9 +190,16 @@
   }
 
   window.UI = {
-    showToast: showToast, toggleTheme: toggleTheme, showModal: showModal, hideModal: hideModal,
-    formatSize: formatSize, updatePeerGrid: updatePeerGrid, showTransferRequest: showTransferRequest,
-    addTransferItem: addTransferItem, updateTransferProgress: updateTransferProgress,
-    removeTransferItem: removeTransferItem, playSound: playSound
+    showToast: showToast,
+    showModal: showModal,
+    hideModal: hideModal,
+    formatSize: formatSize,
+    formatSpeed: formatSpeed,
+    updateOrbitPeers: updateOrbitPeers,
+    showTransferRequest: showTransferRequest,
+    addTransferItem: addTransferItem,
+    updateTransferProgress: updateTransferProgress,
+    removeTransferItem: removeTransferItem,
+    playSound: playSound
   };
 })();

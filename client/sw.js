@@ -1,4 +1,4 @@
-var CACHE = 'chaminda-drop-v2';
+var CACHE = 'chaminda-drop-v4';
 var ASSETS = ['/', '/index.html', '/css/theme.css', '/css/main.css', '/js/device.js', '/js/signaling.js', '/js/webrtc.js', '/js/transfer.js', '/js/qr.js', '/js/ui.js', '/js/app.js', '/js/particles.js', '/js/hero.js'];
 
 self.addEventListener('install', function(e) {

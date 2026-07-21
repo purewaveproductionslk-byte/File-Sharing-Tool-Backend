@@ -38,17 +38,17 @@
   function initSignaling() {
     Signaling.on('connected', function() {
       UI.showToast('Connected to server', 'success');
-      var dot = document.querySelector('.status-dot');
+      var dot = document.getElementById('statusDot');
       if (dot) dot.classList.add('connected');
-      var label = document.getElementById('connectionStatus');
+      var label = document.getElementById('statusText');
       if (label) label.textContent = 'Online';
     });
 
     Signaling.on('disconnected', function() {
       UI.showToast('Disconnected from server', 'error');
-      var dot = document.querySelector('.status-dot');
+      var dot = document.getElementById('statusDot');
       if (dot) dot.classList.remove('connected');
-      var label = document.getElementById('connectionStatus');
+      var label = document.getElementById('statusText');
       if (label) label.textContent = 'Offline';
     });
 
@@ -63,9 +63,7 @@
 
         document.getElementById('inviteAcceptBtn').onclick = function() {
           UI.hideModal('inviteModal');
-          Signaling.connect(function() {
-            Signaling.send({ type: 'join-room', roomId: cleanCode, deviceInfo: state.device });
-          });
+          Signaling.send({ type: 'join-room', roomId: cleanCode, deviceInfo: state.device });
           history.replaceState(null, '', location.pathname);
         };
 
@@ -79,22 +77,20 @@
     Signaling.on('room-created', function(msg) {
       state.roomCode = msg.roomId;
       document.getElementById('roomCode').textContent = msg.roomId;
-      document.getElementById('roomActions').classList.add('hidden');
-      document.getElementById('roomInfo').classList.remove('hidden');
-      var emptyState = document.getElementById('emptyState');
-      if (emptyState) emptyState.classList.add('hidden');
-      document.getElementById('peersSection').classList.remove('hidden');
+      document.getElementById('roomControls').classList.add('hidden');
+      document.getElementById('roomActive').classList.remove('hidden');
+      document.getElementById('orbitSection').classList.remove('hidden');
+      document.getElementById('sendZone').classList.remove('hidden');
       UI.showToast('Room created: ' + msg.roomId, 'success');
     });
 
     Signaling.on('room-joined', function(msg) {
       state.roomCode = msg.roomId;
       document.getElementById('roomCode').textContent = msg.roomId;
-      document.getElementById('roomActions').classList.add('hidden');
-      document.getElementById('roomInfo').classList.remove('hidden');
-      var emptyState = document.getElementById('emptyState');
-      if (emptyState) emptyState.classList.add('hidden');
-      document.getElementById('peersSection').classList.remove('hidden');
+      document.getElementById('roomControls').classList.add('hidden');
+      document.getElementById('roomActive').classList.remove('hidden');
+      document.getElementById('orbitSection').classList.remove('hidden');
+      document.getElementById('sendZone').classList.remove('hidden');
       UI.showToast('Joined room: ' + msg.roomId, 'success');
     });
 
@@ -266,7 +262,7 @@
     document.getElementById('qrBtn').addEventListener('click', function() {
       if (!state.roomCode) return;
       var url = location.origin + '?room=' + state.roomCode;
-      QR.renderTo(document.getElementById('qrCanvas'), url, 220);
+      QR.renderTo(document.getElementById('qrCanvas'), url, 200);
       document.getElementById('qrText').textContent = state.roomCode;
       UI.showModal('qrModal');
     });
@@ -291,23 +287,38 @@
     document.getElementById('renameCancelBtn').addEventListener('click', function() { UI.hideModal('renameModal'); });
 
     document.getElementById('closeTransfersBtn').addEventListener('click', function() {
-      document.getElementById('transferPanel').classList.add('hidden');
+      document.getElementById('transferTray').classList.add('hidden');
     });
 
-    document.getElementById('sendMediaBtn').addEventListener('click', function() {
-      UI.hideModal('actionModal');
-      var input = document.getElementById('mediaInput');
-      if (input) input.click();
-    });
-
-    document.getElementById('sendDocsBtn').addEventListener('click', function() {
-      UI.hideModal('actionModal');
+    document.getElementById('sendFilesBtn').addEventListener('click', function() {
+      if (!state.roomCode) return UI.showToast('Create or join a room first', 'warning');
+      var keys = Object.keys(state.peers);
+      if (keys.length === 0) return UI.showToast('No peers connected', 'warning');
       var input = document.getElementById('fileInput');
       if (input) input.click();
     });
 
-    document.getElementById('cancelActionBtn').addEventListener('click', function() {
-      UI.hideModal('actionModal');
+    document.getElementById('sendMediaBtn').addEventListener('click', function() {
+      if (!state.roomCode) return UI.showToast('Create or join a room first', 'warning');
+      var keys = Object.keys(state.peers);
+      if (keys.length === 0) return UI.showToast('No peers connected', 'warning');
+      var input = document.getElementById('mediaInput');
+      if (input) input.click();
+    });
+
+    document.getElementById('sendAnyBtn').addEventListener('click', function() {
+      if (!state.roomCode) return UI.showToast('Create or join a room first', 'warning');
+      var keys = Object.keys(state.peers);
+      if (keys.length === 0) return UI.showToast('No peers connected', 'warning');
+      var input = document.getElementById('fileInput');
+      if (input) input.click();
+    });
+
+    document.getElementById('themeBtn').addEventListener('click', function() {
+      var html = document.documentElement;
+      var current = html.getAttribute('data-theme');
+      var next = current === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', next);
     });
 
     document.getElementById('fileInput').addEventListener('change', function() {
@@ -320,7 +331,7 @@
       this.value = '';
     });
 
-    [document.getElementById('transferModal'), document.getElementById('renameModal'), document.getElementById('qrModal'), document.getElementById('inviteModal'), document.getElementById('actionModal')].forEach(function(el) {
+    [document.getElementById('transferModal'), document.getElementById('renameModal'), document.getElementById('qrModal'), document.getElementById('inviteModal')].forEach(function(el) {
       if (!el) return;
       el.addEventListener('click', function(e) {
         if (e.target === el) {
@@ -334,14 +345,12 @@
   }
 
   function setupDragDrop() {
-    var zone = document.getElementById('dropZone');
-    var overlay = document.getElementById('dragOverlay');
+    var overlay = document.getElementById('dropOverlay');
     var counter = 0;
 
     document.addEventListener('dragenter', function(e) {
       e.preventDefault();
       counter++;
-      if (zone) zone.classList.add('active');
       if (overlay) overlay.classList.remove('hidden');
     });
 
@@ -350,7 +359,6 @@
       counter--;
       if (counter <= 0) {
         counter = 0;
-        if (zone) zone.classList.remove('active');
         if (overlay) overlay.classList.add('hidden');
       }
     });
@@ -362,7 +370,6 @@
     document.addEventListener('drop', function(e) {
       e.preventDefault();
       counter = 0;
-      if (zone) zone.classList.remove('active');
       if (overlay) overlay.classList.add('hidden');
       if (e.dataTransfer.files.length > 0) handleFiles(Array.from(e.dataTransfer.files));
     });
@@ -421,18 +428,17 @@
     state.roomCode = null;
     state.peers = {};
     state.selectedPeer = null;
-    document.getElementById('roomActions').classList.remove('hidden');
-    document.getElementById('roomInfo').classList.add('hidden');
-    var emptyState = document.getElementById('emptyState');
-    if (emptyState) emptyState.classList.remove('hidden');
-    document.getElementById('peersSection').classList.add('hidden');
-    document.getElementById('peersGrid').innerHTML = '';
+    document.getElementById('roomControls').classList.remove('hidden');
+    document.getElementById('roomActive').classList.add('hidden');
+    document.getElementById('orbitSection').classList.add('hidden');
+    document.getElementById('sendZone').classList.add('hidden');
+    document.getElementById('transferTray').classList.add('hidden');
     UI.showToast('Left room', 'info');
   }
 
   function refreshPeers() {
     var arr = Object.values(state.peers);
-    UI.updatePeerGrid(arr.map(function(p) {
+    UI.updateOrbitPeers(arr.map(function(p) {
       return { id: p.id, name: p.name, icon: p.icon || 'desktop', platform: p.platform || '' };
     }), state.selectedPeer);
   }
