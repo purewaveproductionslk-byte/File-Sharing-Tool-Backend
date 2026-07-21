@@ -232,6 +232,8 @@
   <script>
     if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
       window.WS_SERVER = 'ws://localhost:3000';
+    } else {
+      window.WS_SERVER = 'wss://fileshare-ezdj.onrender.com';
     }
   </script>
   <script src="js/device.js"></script>
