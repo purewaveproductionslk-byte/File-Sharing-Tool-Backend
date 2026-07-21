@@ -1,4 +1,4 @@
-var CACHE = 'chaminda-drop-v1';
+var CACHE = 'chaminda-drop-v2';
 var ASSETS = ['/', '/index.html', '/css/theme.css', '/css/main.css', '/js/device.js', '/js/signaling.js', '/js/webrtc.js', '/js/transfer.js', '/js/qr.js', '/js/ui.js', '/js/app.js', '/js/particles.js', '/js/hero.js'];
 
 self.addEventListener('install', function(e) {
@@ -15,11 +15,21 @@ self.addEventListener('activate', function(e) {
 
 self.addEventListener('fetch', function(e) {
   if (e.request.url.includes('/health')) return;
-  e.respondWith(caches.match(e.request).then(function(r) {
-    return r || fetch(e.request).then(function(resp) {
-      var clone = resp.clone();
-      caches.open(CACHE).then(function(c) { c.put(e.request, clone); });
+  if (!e.request.url.startsWith(self.location.origin)) return;
+
+  e.respondWith(
+    fetch(e.request).then(function(resp) {
+      if (resp && resp.status === 200) {
+        var clone = resp.clone();
+        caches.open(CACHE).then(function(c) {
+          c.put(e.request, clone);
+        });
+      }
       return resp;
-    });
-  }).catch(function() { return caches.match('/index.html'); }));
+    }).catch(function() {
+      return caches.match(e.request).then(function(r) {
+        return r || caches.match('/index.html');
+      });
+    })
+  );
 });
