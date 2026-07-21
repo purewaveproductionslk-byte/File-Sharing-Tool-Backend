@@ -87,8 +87,7 @@
         if (window.App) App.selectPeer(p.id);
         document.querySelectorAll('.peer-card').forEach(function(c) { c.classList.remove('selected'); });
         card.classList.add('selected');
-        var input = document.getElementById('fileInput');
-        if (input) input.click();
+        showModal('actionModal');
       });
       grid.appendChild(card);
     });

@@ -185,9 +185,34 @@
     </div>
   </div>
 
+  <div id="actionModal" class="modal-overlay hidden">
+    <div class="modal glass-card" style="max-width: 340px; padding: 28px;">
+      <h3 class="modal-title" style="font-size: 1.25rem; margin-bottom: 12px; letter-spacing: -0.5px;">Send Content</h3>
+      <p class="modal-subtitle" style="font-size: 0.88rem; margin-bottom: 22px;">Choose what you would like to share with this device.</p>
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <button id="sendMediaBtn" class="btn-primary" style="padding:14px; width:100%">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:8px;vertical-align:middle;display:inline-block">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+          </svg>
+          Photo Library
+        </button>
+        <button id="sendDocsBtn" class="btn-secondary" style="padding:14px; width:100%">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:8px;vertical-align:middle;display:inline-block">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+          </svg>
+          Browse Files
+        </button>
+        <button id="cancelActionBtn" class="btn-secondary" style="padding:10px; margin-top:4px; font-size:0.8rem; border-color:transparent; background:transparent; width:100%">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div id="toastContainer"></div>
 
-  <input id="fileInput" type="file" accept="image/*,video/*,audio/*,.pdf,.txt,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.rar,.tar,.gz,.png,.jpg,.jpeg,.gif,.mp4,.mov,.mp3,.wav" multiple hidden>
+  <input id="mediaInput" type="file" accept="image/*,video/*" multiple hidden>
+  <input id="fileInput" type="file" multiple hidden>
 
   <script src="js/device.js"></script>
   <script src="js/particles.js"></script>

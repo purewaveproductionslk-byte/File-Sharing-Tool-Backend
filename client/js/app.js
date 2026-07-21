@@ -294,12 +294,34 @@
       document.getElementById('transferPanel').classList.add('hidden');
     });
 
+    document.getElementById('sendMediaBtn').addEventListener('click', function() {
+      UI.hideModal('actionModal');
+      var input = document.getElementById('mediaInput');
+      if (input) input.click();
+    });
+
+    document.getElementById('sendDocsBtn').addEventListener('click', function() {
+      UI.hideModal('actionModal');
+      var input = document.getElementById('fileInput');
+      if (input) input.click();
+    });
+
+    document.getElementById('cancelActionBtn').addEventListener('click', function() {
+      UI.hideModal('actionModal');
+    });
+
     document.getElementById('fileInput').addEventListener('change', function() {
       if (this.files.length > 0) handleFiles(Array.from(this.files));
       this.value = '';
     });
 
-    [document.getElementById('transferModal'), document.getElementById('renameModal'), document.getElementById('qrModal'), document.getElementById('inviteModal')].forEach(function(el) {
+    document.getElementById('mediaInput').addEventListener('change', function() {
+      if (this.files.length > 0) handleFiles(Array.from(this.files));
+      this.value = '';
+    });
+
+    [document.getElementById('transferModal'), document.getElementById('renameModal'), document.getElementById('qrModal'), document.getElementById('inviteModal'), document.getElementById('actionModal')].forEach(function(el) {
+      if (!el) return;
       el.addEventListener('click', function(e) {
         if (e.target === el) {
           UI.hideModal(el.id);
