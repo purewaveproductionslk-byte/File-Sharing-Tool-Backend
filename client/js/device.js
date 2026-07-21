@@ -80,7 +80,7 @@
     }
   }
 
-  function init() {
+  function init(callback) {
     var baseName = getDeviceName();
     var tabSuffix = getTabId();
     var info = {
@@ -89,7 +89,26 @@
       platform: getPlatform(),
       icon: getIcon()
     };
-    window.Device.info = info;
+
+    if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
+      navigator.userAgentData.getHighEntropyValues(['model'])
+        .then(function(values) {
+          if (values.model && values.model.trim() !== '') {
+            var cleanModel = values.model.trim();
+            info.baseName = cleanModel;
+            info.name = cleanModel + tabSuffix;
+          }
+          window.Device.info = info;
+          if (callback) callback(info);
+        })
+        .catch(function() {
+          window.Device.info = info;
+          if (callback) callback(info);
+        });
+    } else {
+      window.Device.info = info;
+      if (callback) callback(info);
+    }
     return info;
   }
 

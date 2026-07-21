@@ -12,9 +12,17 @@
   };
 
   document.addEventListener('DOMContentLoaded', function() {
-    state.device = Device.init();
-    showDevice();
-    connectSignaling();
+    initSignaling();
+    Device.init(function(device) {
+      state.device = device;
+      showDevice();
+
+      var params = new URLSearchParams(location.search);
+      var roomParam = params.get('room');
+      if (roomParam) {
+        Signaling.connect();
+      }
+    });
     setupButtons();
     setupDragDrop();
     registerSW();
@@ -27,17 +35,21 @@
     if (platEl) platEl.textContent = state.device.platform;
   }
 
-  function connectSignaling() {
-    Signaling.connect();
-
+  function initSignaling() {
     Signaling.on('connected', function() {
       UI.showToast('Connected to server', 'success');
-      document.querySelector('.status-dot').classList.add('connected');
+      var dot = document.querySelector('.status-dot');
+      if (dot) dot.classList.add('connected');
+      var label = document.getElementById('connectionStatus');
+      if (label) label.textContent = 'Online';
     });
 
     Signaling.on('disconnected', function() {
       UI.showToast('Disconnected from server', 'error');
-      document.querySelector('.status-dot').classList.remove('connected');
+      var dot = document.querySelector('.status-dot');
+      if (dot) dot.classList.remove('connected');
+      var label = document.getElementById('connectionStatus');
+      if (label) label.textContent = 'Offline';
     });
 
     Signaling.on('welcome', function(msg) {
@@ -45,8 +57,22 @@
       var params = new URLSearchParams(location.search);
       var roomParam = params.get('room');
       if (roomParam) {
-        Signaling.send({ type: 'join-room', roomId: roomParam, deviceInfo: state.device });
-        history.replaceState(null, '', location.pathname);
+        var cleanCode = roomParam.trim().toUpperCase();
+        document.getElementById('inviteRoomCode').textContent = cleanCode;
+        UI.showModal('inviteModal');
+
+        document.getElementById('inviteAcceptBtn').onclick = function() {
+          UI.hideModal('inviteModal');
+          Signaling.connect(function() {
+            Signaling.send({ type: 'join-room', roomId: cleanCode, deviceInfo: state.device });
+          });
+          history.replaceState(null, '', location.pathname);
+        };
+
+        document.getElementById('inviteDeclineBtn').onclick = function() {
+          UI.hideModal('inviteModal');
+          history.replaceState(null, '', location.pathname);
+        };
       }
     });
 
@@ -55,8 +81,9 @@
       document.getElementById('roomCode').textContent = msg.roomId;
       document.getElementById('roomActions').classList.add('hidden');
       document.getElementById('roomInfo').classList.remove('hidden');
+      var emptyState = document.getElementById('emptyState');
+      if (emptyState) emptyState.classList.add('hidden');
       document.getElementById('peersSection').classList.remove('hidden');
-      document.getElementById('sendSection').classList.remove('hidden');
       UI.showToast('Room created: ' + msg.roomId, 'success');
     });
 
@@ -65,8 +92,9 @@
       document.getElementById('roomCode').textContent = msg.roomId;
       document.getElementById('roomActions').classList.add('hidden');
       document.getElementById('roomInfo').classList.remove('hidden');
+      var emptyState = document.getElementById('emptyState');
+      if (emptyState) emptyState.classList.add('hidden');
       document.getElementById('peersSection').classList.remove('hidden');
-      document.getElementById('sendSection').classList.remove('hidden');
       UI.showToast('Joined room: ' + msg.roomId, 'success');
     });
 
@@ -188,19 +216,42 @@
   function setupButtons() {
     document.getElementById('createRoomBtn').addEventListener('click', function() {
       if (state.roomCode) return UI.showToast('Already in a room', 'warning');
-      Signaling.send({ type: 'create-room', deviceInfo: state.device });
+      if (!Signaling.isConnected()) {
+        UI.showToast('Initializing connection...', 'info');
+        Signaling.connect(function() {
+          Signaling.send({ type: 'create-room', deviceInfo: state.device });
+        });
+      } else {
+        Signaling.send({ type: 'create-room', deviceInfo: state.device });
+      }
     });
 
     document.getElementById('joinRoomBtn').addEventListener('click', function() {
       var code = document.getElementById('roomCodeInput').value.trim().toUpperCase();
       if (!code) return UI.showToast('Enter a room code', 'warning');
-      Signaling.send({ type: 'join-room', roomId: code, deviceInfo: state.device });
+      if (!Signaling.isConnected()) {
+        UI.showToast('Initializing connection...', 'info');
+        Signaling.connect(function() {
+          Signaling.send({ type: 'join-room', roomId: code, deviceInfo: state.device });
+        });
+      } else {
+        Signaling.send({ type: 'join-room', roomId: code, deviceInfo: state.device });
+      }
     });
 
     document.getElementById('roomCodeInput').addEventListener('keydown', function(e) {
       if (e.key === 'Enter') {
         var code = this.value.trim().toUpperCase();
-        if (code) Signaling.send({ type: 'join-room', roomId: code, deviceInfo: state.device });
+        if (code) {
+          if (!Signaling.isConnected()) {
+            UI.showToast('Initializing connection...', 'info');
+            Signaling.connect(function() {
+              Signaling.send({ type: 'join-room', roomId: code, deviceInfo: state.device });
+            });
+          } else {
+            Signaling.send({ type: 'join-room', roomId: code, deviceInfo: state.device });
+          }
+        }
       }
     });
 
@@ -243,32 +294,54 @@
       document.getElementById('transferPanel').classList.add('hidden');
     });
 
-    document.getElementById('sendFilesBtn').addEventListener('click', function() {
-      if (!state.roomCode) return UI.showToast('Create or join a room first', 'warning');
-      var keys = Object.keys(state.peers);
-      if (keys.length === 0) return UI.showToast('No peers connected', 'warning');
-      document.getElementById('fileInput').click();
-    });
-
     document.getElementById('fileInput').addEventListener('change', function() {
       if (this.files.length > 0) handleFiles(Array.from(this.files));
       this.value = '';
     });
 
-    [document.getElementById('transferModal'), document.getElementById('renameModal'), document.getElementById('qrModal')].forEach(function(el) {
-      el.addEventListener('click', function(e) { if (e.target === el) UI.hideModal(el.id); });
+    [document.getElementById('transferModal'), document.getElementById('renameModal'), document.getElementById('qrModal'), document.getElementById('inviteModal')].forEach(function(el) {
+      el.addEventListener('click', function(e) {
+        if (e.target === el) {
+          UI.hideModal(el.id);
+          if (el.id === 'inviteModal') {
+            history.replaceState(null, '', location.pathname);
+          }
+        }
+      });
     });
   }
 
   function setupDragDrop() {
     var zone = document.getElementById('dropZone');
+    var overlay = document.getElementById('dragOverlay');
     var counter = 0;
 
-    document.addEventListener('dragenter', function(e) { e.preventDefault(); counter++; zone.classList.add('active'); });
-    document.addEventListener('dragleave', function(e) { e.preventDefault(); counter--; if (counter <= 0) { counter = 0; zone.classList.remove('active'); } });
-    document.addEventListener('dragover', function(e) { e.preventDefault(); });
+    document.addEventListener('dragenter', function(e) {
+      e.preventDefault();
+      counter++;
+      if (zone) zone.classList.add('active');
+      if (overlay) overlay.classList.remove('hidden');
+    });
+
+    document.addEventListener('dragleave', function(e) {
+      e.preventDefault();
+      counter--;
+      if (counter <= 0) {
+        counter = 0;
+        if (zone) zone.classList.remove('active');
+        if (overlay) overlay.classList.add('hidden');
+      }
+    });
+
+    document.addEventListener('dragover', function(e) {
+      e.preventDefault();
+    });
+
     document.addEventListener('drop', function(e) {
-      e.preventDefault(); counter = 0; zone.classList.remove('active');
+      e.preventDefault();
+      counter = 0;
+      if (zone) zone.classList.remove('active');
+      if (overlay) overlay.classList.add('hidden');
       if (e.dataTransfer.files.length > 0) handleFiles(Array.from(e.dataTransfer.files));
     });
   }
@@ -328,8 +401,9 @@
     state.selectedPeer = null;
     document.getElementById('roomActions').classList.remove('hidden');
     document.getElementById('roomInfo').classList.add('hidden');
+    var emptyState = document.getElementById('emptyState');
+    if (emptyState) emptyState.classList.remove('hidden');
     document.getElementById('peersSection').classList.add('hidden');
-    document.getElementById('sendSection').classList.add('hidden');
     document.getElementById('peersGrid').innerHTML = '';
     UI.showToast('Left room', 'info');
   }

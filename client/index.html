@@ -21,133 +21,122 @@
   <canvas id="particles"></canvas>
 
   <div class="container">
-    <header class="hero-section">
-      <div id="hero" class="hero-svg-container"></div>
-      <h1 class="hero-title gradient-text">File Sharing Tool</h1>
-      <p class="hero-subtitle">Fast, secure peer-to-peer file sharing</p>
-      <p class="hero-footer">Designed by Chaminda Gunasekara</p>
-    </header>
+    <div class="dashboard-grid">
+      <!-- LEFT PANEL: Control Center -->
+      <div class="left-panel animate-in animate-delay-1">
+        <header class="hero-section">
+          <div id="hero" class="hero-svg-container"></div>
+          <h1 class="hero-title gradient-text">File Sharing</h1>
+          <p class="hero-subtitle">Fast, secure peer-to-peer sharing</p>
+          <p class="hero-footer">Designed by Chaminda Gunasekara</p>
+        </header>
 
-    <section class="device-section glass-card animate-in animate-delay-1">
-      <div class="device-header">
-        <span class="status-dot"></span>
-        <span class="device-label">Your Device</span>
-      </div>
-      <div class="device-name-row">
-        <span id="deviceName" class="device-name">Detecting...</span>
-        <button id="editNameBtn" class="btn-icon" title="Rename">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-          </svg>
-        </button>
-      </div>
-      <span id="devicePlatform" class="device-platform"></span>
-    </section>
+        <section class="device-section glass-card">
+          <div class="device-header">
+            <span class="status-dot"></span>
+            <span id="connectionStatus" class="device-label">Offline</span>
+          </div>
+          <div class="device-name-row">
+            <span id="deviceName" class="device-name">Detecting...</span>
+            <button id="editNameBtn" class="btn-icon" title="Rename">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
+          </div>
+          <span id="devicePlatform" class="device-platform"></span>
+        </section>
 
-    <section class="room-section glass-card animate-in animate-delay-2">
-      <div id="roomActions" class="room-actions">
-        <button id="createRoomBtn" class="btn-primary">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
-          </svg>
-          Create Room
-        </button>
-        <div class="join-group">
-          <input id="roomCodeInput" type="text" class="room-input glass-card" placeholder="Enter room code" maxlength="6" autocomplete="off" spellcheck="false">
-          <button id="joinRoomBtn" class="btn-secondary">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>
-            </svg>
-            Join
-          </button>
+        <section class="room-section glass-card">
+          <div id="roomActions" class="room-actions">
+            <button id="createRoomBtn" class="btn-primary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+              </svg>
+              Create Room
+            </button>
+            <div class="join-group">
+              <input id="roomCodeInput" type="text" class="room-input glass-card" placeholder="Enter room code" maxlength="6" autocomplete="off" spellcheck="false">
+              <button id="joinRoomBtn" class="btn-secondary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>
+                </svg>
+                Join
+              </button>
+            </div>
+          </div>
+          <div id="roomInfo" class="room-info hidden">
+            <span class="room-label">Room Code</span>
+            <div class="room-code-row">
+              <span id="roomCode" class="room-code gradient-text"></span>
+              <button id="copyCodeBtn" class="btn-icon" title="Copy">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+              </button>
+              <button id="qrBtn" class="btn-icon" title="QR Code">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="2" y="2" width="8" height="8" rx="1"/><rect x="14" y="2" width="8" height="8" rx="1"/><rect x="2" y="14" width="8" height="8" rx="1"/><rect x="14" y="14" width="4" height="4"/>
+                </svg>
+              </button>
+              <button id="leaveRoomBtn" class="btn-icon btn-danger" title="Leave">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section id="transferPanel" class="transfer-panel glass-card hidden">
+          <div class="transfer-header">
+            <span>Active Transfers</span>
+            <button id="closeTransfersBtn" class="btn-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div id="transferList" class="transfer-list"></div>
+        </section>
+      </div>
+
+      <!-- RIGHT PANEL: Transfer Hub -->
+      <div class="right-panel animate-in animate-delay-2">
+        <div id="dropZone" class="right-panel-dropzone">
+          <div id="peersSection" class="peers-section hidden">
+            <h2 class="section-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="spin-slow" style="display:inline-block;vertical-align:middle;margin-right:6px">
+                <circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/>
+              </svg>
+              Connected Devices
+            </h2>
+            <p class="click-instruction">Select a device card below to instantly send files</p>
+            <div id="peersGrid" class="peers-grid"></div>
+          </div>
+
+          <div id="emptyState" class="empty-state">
+            <div class="empty-state-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/><line x1="22" y1="22" x2="16.65" y2="16.65"/>
+              </svg>
+            </div>
+            <h3 class="empty-state-title">No Active Sharing Bridge</h3>
+            <p class="empty-state-desc">Create or join a room using the control center to start discovering and sharing files with devices.</p>
+          </div>
+
+          <!-- Overlay showing when file is dragged over -->
+          <div id="dragOverlay" class="drag-overlay hidden">
+            <div class="drag-overlay-content">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:12px;color:var(--brand-primary)">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              <h3>Drop Files Here</h3>
+              <p>to share with the selected device</p>
+            </div>
+          </div>
         </div>
-      </div>
-      <div id="roomInfo" class="room-info hidden">
-        <span class="room-label">Room Code</span>
-        <div class="room-code-row">
-          <span id="roomCode" class="room-code gradient-text"></span>
-          <button id="copyCodeBtn" class="btn-icon" title="Copy">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-            </svg>
-          </button>
-          <button id="qrBtn" class="btn-icon" title="QR Code">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="2" y="2" width="8" height="8" rx="1"/><rect x="14" y="2" width="8" height="8" rx="1"/><rect x="2" y="14" width="8" height="8" rx="1"/><rect x="14" y="14" width="4" height="4"/>
-            </svg>
-          </button>
-          <button id="leaveRoomBtn" class="btn-icon btn-danger" title="Leave">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-    </section>
-
-    <section id="peersSection" class="peers-section hidden">
-      <h2 class="section-title">Connected Devices</h2>
-      <div id="peersGrid" class="peers-grid"></div>
-    </section>
-
-    <section id="sendSection" class="send-section hidden">
-      <button id="sendFilesBtn" class="btn-primary btn-send">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="17 8 12 3 7 8"/>
-          <line x1="12" y1="3" x2="12" y2="15"/>
-        </svg>
-        Send Files
-      </button>
-      <p class="send-hint">or drag & drop files anywhere</p>
-    </section>
-
-    <div id="dropZone" class="drop-zone">
-      <div class="drop-zone-content">
-        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-        </svg>
-        <p>Drop files here to share</p>
       </div>
     </div>
-
-    <section id="transferPanel" class="transfer-panel glass-card hidden">
-      <div class="transfer-header">
-        <span>Active Transfers</span>
-        <button id="closeTransfersBtn" class="btn-icon">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-      <div id="transferList" class="transfer-list"></div>
-    </section>
-
-    <section class="how-it-works animate-in animate-delay-3">
-      <h2 class="section-title" style="text-align:center;margin-bottom:20px">How It Works</h2>
-      <div class="steps-grid">
-        <div class="step-item">
-          <div class="step-number gradient-text">1</div>
-          <span class="step-title">Create a Room</span>
-          <span class="step-desc">Click Create Room to get a unique code</span>
-        </div>
-        <div class="step-item">
-          <div class="step-number gradient-text">2</div>
-          <span class="step-title">Share the Code</span>
-          <span class="step-desc">Send the room code to your friend</span>
-        </div>
-        <div class="step-item">
-          <div class="step-number gradient-text">3</div>
-          <span class="step-title">Drop & Share</span>
-          <span class="step-desc">Drag files or click to select and send</span>
-        </div>
-      </div>
-    </section>
-
-    <footer class="app-footer">
-      <div class="footer-brand gradient-text">File Sharing Tool</div>
-      <div class="footer-credit">Designed & Built by Chaminda Gunasekara</div>
-      <div class="footer-tech">WebRTC &bull; P2P &bull; No Server Storage</div>
-    </footer>
   </div>
 
   <div id="transferModal" class="modal-overlay hidden">
@@ -180,6 +169,19 @@
       <div id="qrCanvas" style="width:220px;height:220px;margin:0 auto 14px"></div>
       <p id="qrText" class="qr-code-text gradient-text"></p>
       <button id="closeQRBtn" class="btn-secondary" style="margin-top:16px;width:100%">Close</button>
+    </div>
+  </div>
+
+  <div id="inviteModal" class="modal-overlay hidden">
+    <div class="modal glass-card">
+      <h3 class="modal-title">Join Room Invite</h3>
+      <p class="modal-subtitle">You have been invited to join room:</p>
+      <div id="inviteRoomCode" class="room-code gradient-text" style="margin-bottom: 20px;"></div>
+      <p class="modal-total">Joining will connect you to devices in this room.</p>
+      <div class="modal-actions">
+        <button id="inviteDeclineBtn" class="btn-secondary">Decline</button>
+        <button id="inviteAcceptBtn" class="btn-primary">Join Room</button>
+      </div>
     </div>
   </div>
 

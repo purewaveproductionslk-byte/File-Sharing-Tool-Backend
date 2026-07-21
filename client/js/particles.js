@@ -12,7 +12,12 @@
     resize();
     for (var i = 0; i < COUNT; i++) particles.push(create(true));
     window.addEventListener('resize', resize);
-    document.addEventListener('mousemove', function(e) { mouse.x = e.clientX; mouse.y = e.clientY; });
+    document.addEventListener('mousemove', function(e) {
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
+      document.documentElement.style.setProperty('--mouse-x', e.clientX + 'px');
+      document.documentElement.style.setProperty('--mouse-y', e.clientY + 'px');
+    });
     document.addEventListener('mouseleave', function() { mouse.x = -9999; mouse.y = -9999; });
     animate();
   }
