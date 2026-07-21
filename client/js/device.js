@@ -41,7 +41,7 @@
       return 'Mac';
     }
     if (/Win/.test(ua)) {
-      if (/Windows NT 10/.test(ua)) return 'Windows 10/11';
+      if (/Windows NT 10/.test(ua)) return 'Windows PC';
       return 'Windows';
     }
     if (/Linux/.test(ua)) return 'Linux Device';
@@ -67,8 +67,28 @@
     return 'desktop';
   }
 
+  function getTabId() {
+    try {
+      var id = sessionStorage.getItem('_tabId');
+      if (!id) {
+        id = ' Tab ' + Math.floor(Math.random() * 90 + 10);
+        sessionStorage.setItem('_tabId', id);
+      }
+      return id;
+    } catch (e) {
+      return ' Tab ' + Math.floor(Math.random() * 90 + 10);
+    }
+  }
+
   function init() {
-    var info = { name: getDeviceName(), platform: getPlatform(), icon: getIcon() };
+    var baseName = getDeviceName();
+    var tabSuffix = getTabId();
+    var info = {
+      name: baseName + tabSuffix,
+      baseName: baseName,
+      platform: getPlatform(),
+      icon: getIcon()
+    };
     window.Device.info = info;
     return info;
   }

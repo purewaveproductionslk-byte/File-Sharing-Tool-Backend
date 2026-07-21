@@ -84,14 +84,16 @@
     rejectBtn.onclick = function() { closeHandler(); if (onReject) onReject(); };
   }
 
-  function addTransferItem(id, fileName, total) {
+  function addTransferItem(id, fileName, total, totalSize) {
     var panel = document.getElementById('transferPanel');
     var list = document.getElementById('transferList');
     panel.classList.remove('hidden');
     var item = document.createElement('div');
     item.className = 'transfer-item';
     item.id = 'tr-' + id;
-    item.innerHTML = '<div class="file-info"><span class="file-name">' + esc(fileName) + '</span><span class="file-status">0%</span></div><div class="progress-track"><div class="progress-fill" style="width:0%"></div></div>';
+    var sizeInfo = total > 1 ? ' (' + total + ' files)' : '';
+    var totalInfo = totalSize ? ' - ' + formatSize(totalSize) : '';
+    item.innerHTML = '<div class="file-info"><span class="file-name">' + esc(fileName) + sizeInfo + '</span><span class="file-status">0%' + totalInfo + '</span></div><div class="progress-track"><div class="progress-fill" style="width:0%"></div></div>';
     list.appendChild(item);
   }
 

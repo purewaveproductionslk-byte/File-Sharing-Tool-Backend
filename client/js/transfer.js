@@ -79,7 +79,7 @@
 
       try {
         state.channel.send(buf);
-      } catch {
+      } catch (e) {
         emit('error', { message: 'Send failed' });
         return;
       }
@@ -135,10 +135,10 @@
     if (fi) {
       fi.parts.push(chunk);
       fi.received += chunk.byteLength || 0;
+      s.totalReceived = (s.totalReceived || 0) + (chunk.byteLength || 0);
       var pct = fi.size > 0 ? (fi.received / fi.size * 100) : 0;
       var elapsed = (Date.now() - s.start) / 1000;
       var speed = elapsed > 0 ? s.totalReceived / elapsed : 0;
-      s.totalReceived += chunk.byteLength || 0;
       emit('progress', {
         peerId: peerId, fileName: fi.name, fileIndex: fileIndex,
         percent: Math.min(pct, 100), speed: speed, speedText: formatSpeed(speed)

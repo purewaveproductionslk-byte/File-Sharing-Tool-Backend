@@ -700,6 +700,29 @@ body::before {
   line-height: 1.4;
 }
 
+/* ── SEND SECTION ── */
+
+.send-section {
+  text-align: center;
+  margin-bottom: 16px;
+  animation: slide-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 0.2s;
+}
+
+.btn-send {
+  width: 100%;
+  padding: 18px 28px;
+  font-size: 1rem;
+  letter-spacing: 0.5px;
+}
+
+.send-hint {
+  margin-top: 10px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
 /* ── FOOTER ── */
 
 .app-footer {

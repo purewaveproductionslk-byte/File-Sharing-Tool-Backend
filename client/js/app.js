@@ -6,6 +6,7 @@
     peers: {},
     selectedPeer: null,
     pendingFiles: [],
+    pendingTarget: null,
     transferCounter: 0
   };
 
@@ -29,18 +30,23 @@
     Signaling.connect();
 
     Signaling.on('connected', function() {
-      UI.showToast('Connected', 'success');
+      UI.showToast('Connected to server', 'success');
       document.querySelector('.status-dot').classList.add('connected');
     });
 
     Signaling.on('disconnected', function() {
-      UI.showToast('Disconnected', 'error');
+      UI.showToast('Disconnected from server', 'error');
       document.querySelector('.status-dot').classList.remove('connected');
     });
 
     Signaling.on('welcome', function(msg) {
       state.clientId = msg.clientId;
-      Signaling.send({ type: 'create-room', deviceInfo: state.device });
+      var params = new URLSearchParams(location.search);
+      var roomParam = params.get('room');
+      if (roomParam) {
+        Signaling.send({ type: 'join-room', roomId: roomParam, deviceInfo: state.device });
+        history.replaceState(null, '', location.pathname);
+      }
     });
 
     Signaling.on('room-created', function(msg) {
@@ -49,7 +55,8 @@
       document.getElementById('roomActions').classList.add('hidden');
       document.getElementById('roomInfo').classList.remove('hidden');
       document.getElementById('peersSection').classList.remove('hidden');
-      UI.showToast('Room created', 'success');
+      document.getElementById('sendSection').classList.remove('hidden');
+      UI.showToast('Room created: ' + msg.roomId, 'success');
     });
 
     Signaling.on('room-joined', function(msg) {
@@ -58,6 +65,7 @@
       document.getElementById('roomActions').classList.add('hidden');
       document.getElementById('roomInfo').classList.remove('hidden');
       document.getElementById('peersSection').classList.remove('hidden');
+      document.getElementById('sendSection').classList.remove('hidden');
       UI.showToast('Joined room: ' + msg.roomId, 'success');
     });
 
@@ -69,6 +77,7 @@
         });
       }
       refreshPeers();
+      autoSelectSinglePeer();
     });
 
     Signaling.on('peer-joined', function(msg) {
@@ -77,6 +86,7 @@
       UI.playSound('connect');
       UI.showToast(msg.name + ' joined', 'success');
       WebRTC.connectTo(msg.peerId);
+      autoSelectSinglePeer();
     });
 
     Signaling.on('peer-left', function(msg) {
@@ -86,6 +96,8 @@
       refreshPeers();
       UI.playSound('disconnect');
       if (peer) UI.showToast(peer.name + ' left', 'warning');
+      if (state.selectedPeer === msg.peerId) state.selectedPeer = null;
+      autoSelectSinglePeer();
     });
 
     Signaling.on('peer-renamed', function(msg) {
@@ -101,21 +113,28 @@
 
     Signaling.on('transfer-request', function(msg) {
       UI.playSound('transfer');
-      UI.showTransferRequest(msg.fromName, msg.files || [], msg.totalSize || 0,
-        function() {
-          Signaling.send({ type: 'transfer-response', targetId: msg.fromId, accepted: true });
-          UI.showToast('Transfer accepted', 'success');
-        },
-        function() {
-          Signaling.send({ type: 'transfer-response', targetId: msg.fromId, accepted: false });
-        }
-      );
+      var singleMode = Object.keys(state.peers).length <= 2;
+      if (singleMode) {
+        Signaling.send({ type: 'transfer-response', targetId: msg.fromId, accepted: true });
+        UI.showToast('Receiving from ' + msg.fromName + '...', 'info');
+      } else {
+        UI.showTransferRequest(msg.fromName, msg.files || [], msg.totalSize || 0,
+          function() {
+            Signaling.send({ type: 'transfer-response', targetId: msg.fromId, accepted: true });
+            UI.showToast('Transfer accepted', 'success');
+          },
+          function() {
+            Signaling.send({ type: 'transfer-response', targetId: msg.fromId, accepted: false });
+          }
+        );
+      }
     });
 
     Signaling.on('transfer-response', function(msg) {
       if (msg.accepted && state.pendingFiles.length > 0) {
         var id = ++state.transferCounter;
-        UI.addTransferItem(id, state.pendingFiles[0].name, state.pendingFiles.length);
+        var totalSize = state.pendingFiles.reduce(function(s, f) { return s + f.size; }, 0);
+        UI.addTransferItem(id, state.pendingFiles[0].name, state.pendingFiles.length, totalSize);
         Transfer.on('progress', function(p) { UI.updateTransferProgress(id, p.percent, p.speedText); });
         Transfer.on('file-sent', function() { UI.updateTransferProgress(id, 100, 'Done'); });
         Transfer.sendFiles(msg.fromId, state.pendingFiles);
@@ -137,7 +156,7 @@
 
     Transfer.on('receive-start', function(d) {
       var id = ++state.transferCounter;
-      UI.addTransferItem(id, d.fileName, d.totalFiles);
+      UI.addTransferItem(id, d.fileName, d.totalFiles, d.fileSize);
     });
 
     Transfer.on('file-received', function(d) {
@@ -146,6 +165,7 @@
 
     Transfer.on('transfer-complete', function() {
       UI.showToast('Transfer complete!', 'success');
+      UI.playSound('transfer');
     });
   }
 
@@ -207,6 +227,13 @@
       document.getElementById('transferPanel').classList.add('hidden');
     });
 
+    document.getElementById('sendFilesBtn').addEventListener('click', function() {
+      if (!state.roomCode) return UI.showToast('Create or join a room first', 'warning');
+      var keys = Object.keys(state.peers);
+      if (keys.length === 0) return UI.showToast('No peers connected', 'warning');
+      document.getElementById('fileInput').click();
+    });
+
     document.getElementById('fileInput').addEventListener('change', function() {
       if (this.files.length > 0) handleFiles(Array.from(this.files));
       this.value = '';
@@ -231,31 +258,50 @@
   }
 
   function handleFiles(files) {
-    if (!state.roomCode) return UI.showToast('Create a room first', 'warning');
+    if (!state.roomCode) return UI.showToast('Create or join a room first', 'warning');
     var keys = Object.keys(state.peers);
     if (keys.length === 0) return UI.showToast('No peers connected', 'warning');
-    if (!state.selectedPeer) {
-      if (keys.length === 1) state.selectedPeer = keys[0];
-      else return UI.showToast('Select a peer first', 'info');
-    }
-    var target = state.peers[state.selectedPeer];
+
+    var targetId = state.selectedPeer || keys[0];
+    var target = state.peers[targetId];
     var total = files.reduce(function(s, f) { return s + f.size; }, 0);
 
-    UI.showTransferRequest(
-      target ? target.name : 'Peer',
-      files.map(function(f) { return { name: f.name, size: f.size }; }),
-      total,
-      function() {
-        state.pendingFiles = files;
-        Signaling.send({
-          type: 'transfer-request', targetId: state.selectedPeer,
-          files: files.map(function(f) { return { name: f.name, size: f.size, mimeType: f.type }; }),
-          totalSize: total
-        });
-        UI.showToast('Request sent', 'info');
-      },
-      function() {}
-    );
+    var singleMode = keys.length <= 1;
+    if (singleMode) {
+      state.pendingFiles = files;
+      state.pendingTarget = targetId;
+      Signaling.send({
+        type: 'transfer-request', targetId: targetId,
+        files: files.map(function(f) { return { name: f.name, size: f.size, mimeType: f.type }; }),
+        totalSize: total
+      });
+      UI.showToast('Sending to ' + target.name + '...', 'info');
+    } else {
+      UI.showTransferRequest(
+        target ? target.name : 'Peer',
+        files.map(function(f) { return { name: f.name, size: f.size }; }),
+        total,
+        function() {
+          state.pendingFiles = files;
+          state.pendingTarget = targetId;
+          Signaling.send({
+            type: 'transfer-request', targetId: targetId,
+            files: files.map(function(f) { return { name: f.name, size: f.size, mimeType: f.type }; }),
+            totalSize: total
+          });
+          UI.showToast('Request sent to ' + (target ? target.name : 'peer'), 'info');
+        },
+        function() {}
+      );
+    }
+  }
+
+  function autoSelectSinglePeer() {
+    var keys = Object.keys(state.peers);
+    if (keys.length === 1 && !state.selectedPeer) {
+      state.selectedPeer = keys[0];
+      refreshPeers();
+    }
   }
 
   function leaveRoom() {
@@ -267,6 +313,7 @@
     document.getElementById('roomActions').classList.remove('hidden');
     document.getElementById('roomInfo').classList.add('hidden');
     document.getElementById('peersSection').classList.add('hidden');
+    document.getElementById('sendSection').classList.add('hidden');
     document.getElementById('peersGrid').innerHTML = '';
     UI.showToast('Left room', 'info');
   }
