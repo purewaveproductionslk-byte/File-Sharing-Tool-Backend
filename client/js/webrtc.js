@@ -2,7 +2,13 @@
   var pcs = {};
   var channels = {};
   var handlers = {};
-  var config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] };
+  var config = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' }
+    ],
+    sdpSemantics: 'unified-plan'
+  };
 
   function emit(event, data) {
     if (handlers[event]) handlers[event].forEach(function(h) { h(data); });
@@ -38,7 +44,10 @@
     pc.ondatachannel = function(e) { setupChannel(peerId, e.channel); };
 
     if (initiator) {
-      var ch = pc.createDataChannel('files', { ordered: true });
+      var ch = pc.createDataChannel('files', {
+        ordered: true,
+        maxRetransmits: 0
+      });
       setupChannel(peerId, ch);
     }
 
@@ -47,35 +56,47 @@
 
   function setupChannel(peerId, ch) {
     ch.binaryType = 'arraybuffer';
-    ch.bufferedAmountLowThreshold = 65536; // 64 KB
+    ch.bufferedAmountLowThreshold = 64 * 1024;
+
     ch.onopen = function() {
       channels[peerId] = ch;
       emit('channel-open', { peerId: peerId });
     };
+
     ch.onclose = function() {
       delete channels[peerId];
       emit('channel-close', { peerId: peerId });
     };
+
+    var headerDecoder = new TextDecoder();
+
     ch.onmessage = function(e) {
       var data = e.data;
       if (data instanceof ArrayBuffer) {
-        var view = new DataView(data);
-        var len = view.getUint32(0, false);
-        var headerStr = new TextDecoder().decode(new Uint8Array(data, 4, len));
-        try {
-          var json = JSON.parse(headerStr);
-          if (json.type === 'file-chunk') {
-            Transfer.handleChunk(peerId, json.fileIndex, data.slice(4 + len));
-          }
-        } catch {}
+        processBinaryChunk(peerId, data, headerDecoder);
         return;
       }
       var msg;
-      try { msg = JSON.parse(data); } catch { return; }
+      try { msg = JSON.parse(data); } catch (err) { return; }
       if (msg.type === 'file-meta' || msg.type === 'file-end') {
         Transfer.handleMessage(peerId, msg);
       }
     };
+  }
+
+  function processBinaryChunk(peerId, buffer, decoder) {
+    if (buffer.byteLength < 4) return;
+    var view = new DataView(buffer);
+    var headerLen = view.getUint32(0, false);
+    if (4 + headerLen > buffer.byteLength) return;
+    var headerStr = decoder.decode(new Uint8Array(buffer, 4, headerLen));
+    try {
+      var json = JSON.parse(headerStr);
+      if (json.type === 'file-chunk') {
+        var payload = buffer.slice(4 + headerLen);
+        Transfer.handleChunk(peerId, json.fileIndex, payload);
+      }
+    } catch (err) {}
   }
 
   function connectTo(peerId) {
@@ -133,8 +154,8 @@
   }
 
   function closePeer(peerId) {
-    if (channels[peerId]) { try { channels[peerId].close(); } catch {} delete channels[peerId]; }
-    if (pcs[peerId]) { try { pcs[peerId].close(); } catch {} delete pcs[peerId]; }
+    if (channels[peerId]) { try { channels[peerId].close(); } catch (err) {} delete channels[peerId]; }
+    if (pcs[peerId]) { try { pcs[peerId].close(); } catch (err) {} delete pcs[peerId]; }
   }
 
   function disconnectAll() {
